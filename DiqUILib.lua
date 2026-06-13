@@ -612,11 +612,12 @@ function Diq:CreateWindow(config)
 		-- ======================================
 		function Tab:CreateLabel(text)
 			local obj = {}
+			local targetParent = (self and self._content) or content
 
 			local frame = Instance.new("Frame")
 			frame.Size = UDim2.new(1, 0, 0, 22)
 			frame.BackgroundTransparency = 1
-			frame.Parent = content
+			frame.Parent = targetParent
 
 			local lbl = Instance.new("TextLabel")
 			lbl.Size = UDim2.new(1, -5, 1, 0)
@@ -645,25 +646,97 @@ function Diq:CreateWindow(config)
 		end
 
 		-- ======================================
+		-- 📦 CreateSection — กล่องจัดกลุ่ม (Unified Container)
+		-- ======================================
+		function Tab:CreateSection(title)
+			local Section = {}
+			setmetatable(Section, { __index = Tab })
+
+			local targetParent = (self and self._content) or content
+
+			local sectionFrame = Instance.new("Frame")
+			sectionFrame.Size = UDim2.new(1, 0, 0, 0)
+			sectionFrame.BackgroundColor3 = Theme.ElementBg
+			sectionFrame.ClipsDescendants = true
+			sectionFrame.Parent = targetParent
+			ApplyCorner(sectionFrame, 8)
+			ApplyStroke(sectionFrame, Theme.Outline)
+
+			local sectionLayout = Instance.new("UIListLayout")
+			sectionLayout.Padding = UDim.new(0, 0)
+			sectionLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+			sectionLayout.SortOrder = Enum.SortOrder.LayoutOrder
+			sectionLayout.Parent = sectionFrame
+
+			local titleContainer = Instance.new("Frame")
+			titleContainer.Size = UDim2.new(1, 0, 0, 30)
+			titleContainer.BackgroundColor3 = Theme.HoverBg
+			titleContainer.BackgroundTransparency = 0.5
+			titleContainer.BorderSizePixel = 0
+			titleContainer.Parent = sectionFrame
+
+			local titleLbl = Instance.new("TextLabel")
+			titleLbl.Size = UDim2.new(1, -24, 1, 0)
+			titleLbl.Position = UDim2.new(0, 12, 0, 0)
+			titleLbl.BackgroundTransparency = 1
+			titleLbl.Text = title
+			titleLbl.TextColor3 = Theme.Accent
+			titleLbl.Font = Enum.Font.GothamBold
+			titleLbl.TextSize = 12
+			titleLbl.TextXAlignment = Enum.TextXAlignment.Left
+			titleLbl.Parent = titleContainer
+
+			connections:Track(sectionLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+				sectionFrame.Size = UDim2.new(1, 0, 0, sectionLayout.AbsoluteContentSize.Y)
+			end))
+
+			Section._content = sectionFrame
+			Section._isSection = true
+			Section._itemCount = 0
+			return Section
+		end
+
+		-- ======================================
 		-- 🔘 CreateButton — ปุ่มกด (มี debounce)
 		-- ======================================
 		function Tab:CreateButton(text, callback, config)
 			local obj = {}
+			local targetParent = (self and self._content) or content
 			local debounce = false
 			config = config or {}
 
-			local frame = Instance.new("Frame")
+			local frame = Instance.new("TextButton")
 			frame.Size = UDim2.new(1, 0, 0, 36)
 			frame.BackgroundColor3 = Theme.ElementBg
-			frame.Parent = content
-			ApplyCorner(frame, 8)
-			local stroke = ApplyStroke(frame, Theme.Outline)
+			frame.AutoButtonColor = false
+			frame.Text = ""
+			frame.Parent = targetParent
+			
+			local isSection = self and self._isSection
+			local stroke
+			
+			if isSection then
+				frame.BackgroundTransparency = 1
+				if self._itemCount and self._itemCount > 0 then
+					local sep = Instance.new("Frame")
+					sep.Size = UDim2.new(1, -24, 0, 1)
+					sep.Position = UDim2.new(0, 12, 0, 0)
+					sep.BackgroundColor3 = Theme.Outline
+					sep.BorderSizePixel = 0
+					sep.BackgroundTransparency = 0.5
+					sep.Parent = frame
+				end
+				if self._itemCount then self._itemCount = self._itemCount + 1 end
+			else
+				ApplyCorner(frame, 8)
+				stroke = ApplyStroke(frame, Theme.Outline)
+			end
 
 			-- Icon (ถ้ามี)
 			local hasIcon = config.Icon and AttachIcon(config.Icon, frame, 16, Theme.SubText, UDim2.new(0, 12, 0.5, -8))
 			local textPadLeft = hasIcon and 34 or 0
 
-			local btn = Instance.new("TextButton")
+			local btn = Instance.new("TextLabel")
 			btn.Size = UDim2.new(1, -textPadLeft, 1, 0)
 			btn.Position = UDim2.new(0, textPadLeft, 0, 0)
 			btn.BackgroundTransparency = 1
@@ -671,20 +744,27 @@ function Diq:CreateWindow(config)
 			btn.TextColor3 = Theme.Text
 			btn.Font = Enum.Font.GothamMedium
 			btn.TextSize = 13
-			btn.AutoButtonColor = false
 			btn.Parent = frame
 
-			connections:Track(btn.MouseEnter:Connect(function()
-				Tween(frame, 0.2, { BackgroundColor3 = Theme.HoverBg })
-				Tween(stroke, 0.2, { Color = Theme.Accent })
+			connections:Track(frame.MouseEnter:Connect(function()
+				if isSection then
+					Tween(frame, 0.2, { BackgroundTransparency = 0, BackgroundColor3 = Theme.HoverBg })
+				else
+					Tween(frame, 0.2, { BackgroundColor3 = Theme.HoverBg })
+					if stroke then Tween(stroke, 0.2, { Color = Theme.Accent }) end
+				end
 			end))
 
-			connections:Track(btn.MouseLeave:Connect(function()
-				Tween(frame, 0.2, { BackgroundColor3 = Theme.ElementBg })
-				Tween(stroke, 0.2, { Color = Theme.Outline })
+			connections:Track(frame.MouseLeave:Connect(function()
+				if isSection then
+					Tween(frame, 0.2, { BackgroundTransparency = 1 })
+				else
+					Tween(frame, 0.2, { BackgroundColor3 = Theme.ElementBg })
+					if stroke then Tween(stroke, 0.2, { Color = Theme.Outline }) end
+				end
 			end))
 
-			connections:Track(btn.MouseButton1Click:Connect(function()
+			connections:Track(frame.MouseButton1Click:Connect(function()
 				if debounce then return end
 				debounce = true
 
@@ -706,22 +786,51 @@ function Diq:CreateWindow(config)
 		end
 
 		-- ======================================
+<<<<<<< HEAD
 		-- 🔄 CreateToggle — สวิตช์เปิด/ปิด (รองรับ Keybind & Slider ในตัว)
+=======
+		-- ⚙️ CreateToggle — สวิตช์เปิด/ปิด
+>>>>>>> e28ac646795a2c6069af9c961f18d929cfa74903
 		-- ======================================
 		function Tab:CreateToggle(text, default, callback, config)
 			local obj = {}
 			local toggled = default or false
+			local targetParent = (self and self._content) or content
 			config = config or {}
 
+<<<<<<< HEAD
 			local frameHeight = 36
 			if config.Slider then frameHeight = frameHeight + 46 end
 
 			local frame = Instance.new("Frame")
 			frame.Size = UDim2.new(1, 0, 0, frameHeight)
+=======
+			local frame = Instance.new("TextButton")
+			frame.Size = UDim2.new(1, 0, 0, 36)
+>>>>>>> e28ac646795a2c6069af9c961f18d929cfa74903
 			frame.BackgroundColor3 = Theme.ElementBg
-			frame.Parent = content
-			ApplyCorner(frame, 8)
-			ApplyStroke(frame, Theme.Outline)
+			frame.AutoButtonColor = false
+			frame.Text = ""
+			frame.Parent = targetParent
+
+			local isSection = self and self._isSection
+			
+			if isSection then
+				frame.BackgroundTransparency = 1
+				if self._itemCount and self._itemCount > 0 then
+					local sep = Instance.new("Frame")
+					sep.Size = UDim2.new(1, -24, 0, 1)
+					sep.Position = UDim2.new(0, 12, 0, 0)
+					sep.BackgroundColor3 = Theme.Outline
+					sep.BorderSizePixel = 0
+					sep.BackgroundTransparency = 0.5
+					sep.Parent = frame
+				end
+				if self._itemCount then self._itemCount = self._itemCount + 1 end
+			else
+				ApplyCorner(frame, 8)
+				ApplyStroke(frame, Theme.Outline)
+			end
 
 			-- Top area
 			local topArea = Instance.new("Frame")
@@ -761,17 +870,21 @@ function Diq:CreateWindow(config)
 			knob.Parent = switchBg
 			ApplyCorner(knob, 6)
 
+<<<<<<< HEAD
 			local btn = Instance.new("TextButton")
 			btn.Size = UDim2.new(1, 0, 1, 0)
 			btn.BackgroundTransparency = 1
 			btn.Text = ""
 			btn.Parent = topArea
 
+=======
+>>>>>>> e28ac646795a2c6069af9c961f18d929cfa74903
 			local function UpdateVisual()
 				Tween(switchBg, 0.25, { BackgroundColor3 = toggled and Theme.Accent or Theme.SliderBg })
 				Tween(knob, 0.25, { Position = UDim2.new(0, toggled and 21 or 3, 0.5, -6) })
 			end
 
+<<<<<<< HEAD
 			-- KEYBIND (ถ้ามี)
 			local currentKey = config.Keybind and config.Keybind.Default
 			if config.Keybind then
@@ -919,6 +1032,9 @@ function Diq:CreateWindow(config)
 			end
 
 			connections:Track(btn.MouseButton1Click:Connect(function()
+=======
+			connections:Track(frame.MouseButton1Click:Connect(function()
+>>>>>>> e28ac646795a2c6069af9c961f18d929cfa74903
 				toggled = not toggled
 				UpdateVisual()
 				if callback then task.spawn(callback, toggled) end
@@ -939,13 +1055,31 @@ function Diq:CreateWindow(config)
 			local obj = {}
 			local value = math.clamp(default or min, min, max)
 			local sliding = false
+			local targetParent = (self and self._content) or content
 
 			local frame = Instance.new("Frame")
 			frame.Size = UDim2.new(1, 0, 0, 52)
 			frame.BackgroundColor3 = Theme.ElementBg
-			frame.Parent = content
-			ApplyCorner(frame, 8)
-			ApplyStroke(frame, Theme.Outline)
+			frame.Parent = targetParent
+
+			local isSection = self and self._isSection
+			
+			if isSection then
+				frame.BackgroundTransparency = 1
+				if self._itemCount and self._itemCount > 0 then
+					local sep = Instance.new("Frame")
+					sep.Size = UDim2.new(1, -24, 0, 1)
+					sep.Position = UDim2.new(0, 12, 0, 0)
+					sep.BackgroundColor3 = Theme.Outline
+					sep.BorderSizePixel = 0
+					sep.BackgroundTransparency = 0.5
+					sep.Parent = frame
+				end
+				if self._itemCount then self._itemCount = self._itemCount + 1 end
+			else
+				ApplyCorner(frame, 8)
+				ApplyStroke(frame, Theme.Outline)
+			end
 
 			local lbl = Instance.new("TextLabel")
 			lbl.Size = UDim2.new(1, -55, 0, 20)
@@ -1071,13 +1205,14 @@ function Diq:CreateWindow(config)
 			local obj = {}
 			local selected = default or (options and options[1]) or ""
 			local isOpen = false
+			local targetParent = (self and self._content) or content
 
 			local frame = Instance.new("Frame")
 			frame.Size = UDim2.new(1, 0, 0, 36)
 			frame.BackgroundColor3 = Theme.ElementBg
 			frame.ClipsDescendants = false
 			frame.ZIndex = 5
-			frame.Parent = content
+			frame.Parent = targetParent
 			ApplyCorner(frame, 8)
 			ApplyStroke(frame, Theme.Outline)
 
@@ -1224,11 +1359,12 @@ function Diq:CreateWindow(config)
 		-- ======================================
 		function Tab:CreateInput(text, placeholder, callback)
 			local obj = {}
+			local targetParent = (self and self._content) or content
 
 			local frame = Instance.new("Frame")
 			frame.Size = UDim2.new(1, 0, 0, 36)
 			frame.BackgroundColor3 = Theme.ElementBg
-			frame.Parent = content
+			frame.Parent = targetParent
 			ApplyCorner(frame, 8)
 			ApplyStroke(frame, Theme.Outline)
 
@@ -1284,13 +1420,31 @@ function Diq:CreateWindow(config)
 			local obj = {}
 			local currentKey = default or Enum.KeyCode.Unknown
 			local listening = false
+			local targetParent = (self and self._content) or content
 
 			local frame = Instance.new("Frame")
 			frame.Size = UDim2.new(1, 0, 0, 36)
 			frame.BackgroundColor3 = Theme.ElementBg
-			frame.Parent = content
-			ApplyCorner(frame, 8)
-			ApplyStroke(frame, Theme.Outline)
+			frame.Parent = targetParent
+
+			local isSection = self and self._isSection
+			
+			if isSection then
+				frame.BackgroundTransparency = 1
+				if self._itemCount and self._itemCount > 0 then
+					local sep = Instance.new("Frame")
+					sep.Size = UDim2.new(1, -24, 0, 1)
+					sep.Position = UDim2.new(0, 12, 0, 0)
+					sep.BackgroundColor3 = Theme.Outline
+					sep.BorderSizePixel = 0
+					sep.BackgroundTransparency = 0.5
+					sep.Parent = frame
+				end
+				if self._itemCount then self._itemCount = self._itemCount + 1 end
+			else
+				ApplyCorner(frame, 8)
+				ApplyStroke(frame, Theme.Outline)
+			end
 
 			local lbl = Instance.new("TextLabel")
 			lbl.Size = UDim2.new(1, -95, 1, 0)
