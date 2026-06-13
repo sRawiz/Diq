@@ -288,6 +288,7 @@ settingsTab:CreateLabel("DANGER ZONE")
 
 settingsTab:CreateButton("Reset All Settings", function()
 	MyWindow:ResetAll()
+	task.wait(0.15) -- รอให้ระบบปิดแจ้งเตือนจังหวะ Reset ทำงานเสร็จก่อน
 	DiqUI:Notify("Reset Complete", "All settings restored to defaults", 3, "success")
 end, { Icon = "rotate-ccw" })
 

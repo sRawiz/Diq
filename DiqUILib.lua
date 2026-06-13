@@ -196,6 +196,7 @@ end
 -- แสดงการแจ้งเตือน
 -- notifType: "info" | "success" | "warning" | "error"
 function Diq:Notify(title, message, duration, notifType)
+	if Diq.SuppressNotifications then return end
 	if not NotificationHolder or not NotificationHolder.Parent then return end
 
 	duration = duration or 3
@@ -304,9 +305,13 @@ function Diq:CreateWindow(config)
 	Window._elements = {} -- เก็บ element ทุกตัวที่มี state เพื่อไว้ทำ Reset
 	
 	function Window:ResetAll()
+		Diq.SuppressNotifications = true
 		for _, element in ipairs(self._elements) do
 			if element.Reset then element:Reset() end
 		end
+		task.delay(0.1, function()
+			Diq.SuppressNotifications = false
+		end)
 	end
 
 	-- ==========================================
