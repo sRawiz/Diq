@@ -17,6 +17,7 @@ local DiqUI    = loadstring(game:HttpGet(BASE_URL .. "DiqUILib.lua?_=" .. tostri
 local DiqIcons = loadstring(game:HttpGet(BASE_URL .. "DiqIcons.lua?_=" .. tostring(tick())))()
 local Movement = loadstring(game:HttpGet(BASE_URL .. "MovementSystem.lua?_=" .. tostring(tick())))()
 local ESP      = loadstring(game:HttpGet(BASE_URL .. "ESPSystem.lua?_=" .. tostring(tick())))()
+local Misc     = loadstring(game:HttpGet(BASE_URL .. "MiscSystem.lua?_=" .. tostring(tick())))()
 
 -- ⭐ โหลด Icon เข้า Library (ทำครั้งเดียว)
 DiqUI:LoadIcons(DiqIcons)
@@ -184,6 +185,25 @@ end)
 settingsTab:CreateDropdown("Teleport Mode", { "Instant", "Smooth", "CFrame" }, "Instant", function(selected)
 	DiqUI:Notify("Mode Changed", "Current Mode: " .. selected, 2, "info")
 end)
+
+settingsTab:CreateLabel("SERVER MANAGEMENT")
+
+settingsTab:CreateButton("Rejoin Server", function()
+	DiqUI:Notify("Server", "Rejoining the current server...", 3, "info")
+	task.delay(0.5, function()
+		Misc.Rejoin()
+	end)
+end, { Icon = "rotate-cw" })
+
+settingsTab:CreateButton("Server Hop", function()
+	DiqUI:Notify("Server", "Searching for a new server...", 3, "info")
+	task.spawn(function()
+		local success, msg = Misc.ServerHop()
+		if not success then
+			DiqUI:Notify("Server Hop Failed", msg, 4, "warning")
+		end
+	end)
+end, { Icon = "server" })
 
 settingsTab:CreateLabel("ABOUT")
 
