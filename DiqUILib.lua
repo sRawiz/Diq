@@ -786,32 +786,20 @@ function Diq:CreateWindow(config)
 		end
 
 		-- ======================================
-<<<<<<< HEAD
 		-- 🔄 CreateToggle — สวิตช์เปิด/ปิด (รองรับ Keybind & Slider ในตัว)
-=======
-		-- ⚙️ CreateToggle — สวิตช์เปิด/ปิด
->>>>>>> e28ac646795a2c6069af9c961f18d929cfa74903
 		-- ======================================
 		function Tab:CreateToggle(text, default, callback, config)
 			local obj = {}
 			local toggled = default or false
-			local targetParent = (self and self._content) or content
 			config = config or {}
 
-<<<<<<< HEAD
 			local frameHeight = 36
 			if config.Slider then frameHeight = frameHeight + 46 end
 
 			local frame = Instance.new("Frame")
 			frame.Size = UDim2.new(1, 0, 0, frameHeight)
-=======
-			local frame = Instance.new("TextButton")
-			frame.Size = UDim2.new(1, 0, 0, 36)
->>>>>>> e28ac646795a2c6069af9c961f18d929cfa74903
 			frame.BackgroundColor3 = Theme.ElementBg
-			frame.AutoButtonColor = false
-			frame.Text = ""
-			frame.Parent = targetParent
+			frame.Parent = content
 
 			local isSection = self and self._isSection
 			
@@ -870,21 +858,17 @@ function Diq:CreateWindow(config)
 			knob.Parent = switchBg
 			ApplyCorner(knob, 6)
 
-<<<<<<< HEAD
 			local btn = Instance.new("TextButton")
 			btn.Size = UDim2.new(1, 0, 1, 0)
 			btn.BackgroundTransparency = 1
 			btn.Text = ""
 			btn.Parent = topArea
 
-=======
->>>>>>> e28ac646795a2c6069af9c961f18d929cfa74903
 			local function UpdateVisual()
 				Tween(switchBg, 0.25, { BackgroundColor3 = toggled and Theme.Accent or Theme.SliderBg })
 				Tween(knob, 0.25, { Position = UDim2.new(0, toggled and 21 or 3, 0.5, -6) })
 			end
 
-<<<<<<< HEAD
 			-- KEYBIND (ถ้ามี)
 			local currentKey = config.Keybind and config.Keybind.Default
 			if config.Keybind then
@@ -1032,9 +1016,6 @@ function Diq:CreateWindow(config)
 			end
 
 			connections:Track(btn.MouseButton1Click:Connect(function()
-=======
-			connections:Track(frame.MouseButton1Click:Connect(function()
->>>>>>> e28ac646795a2c6069af9c961f18d929cfa74903
 				toggled = not toggled
 				UpdateVisual()
 				if callback then task.spawn(callback, toggled) end
