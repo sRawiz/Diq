@@ -13,9 +13,9 @@ local REPO_NAME = "Diq"
 local BASE_URL = "https://raw.githubusercontent.com/" .. GITHUB_USERNAME .. "/" .. REPO_NAME .. "/main/"
 
 -- โหลด Module ผ่านอินเทอร์เน็ต
-local DiqUI    = loadstring(game:HttpGet(BASE_URL .. "DiqUILib.lua"))()
-local DiqIcons = loadstring(game:HttpGet(BASE_URL .. "DiqIcons.lua"))()
-local Movement = loadstring(game:HttpGet(BASE_URL .. "MovementSystem.lua"))()
+local DiqUI    = loadstring(game:HttpGet(BASE_URL .. "DiqUILib.lua?_=" .. tostring(tick())))()
+local DiqIcons = loadstring(game:HttpGet(BASE_URL .. "DiqIcons.lua?_=" .. tostring(tick())))()
+local Movement = loadstring(game:HttpGet(BASE_URL .. "MovementSystem.lua?_=" .. tostring(tick())))()
 
 -- ⭐ โหลด Icon เข้า Library (ทำครั้งเดียว)
 DiqUI:LoadIcons(DiqIcons)
