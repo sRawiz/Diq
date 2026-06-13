@@ -646,7 +646,7 @@ function Diq:CreateWindow(config)
 		end
 
 		-- ======================================
-		-- 📦 CreateSection — กล่องจัดกลุ่ม
+		-- 📦 CreateSection — กล่องจัดกลุ่ม (Unified Container)
 		-- ======================================
 		function Tab:CreateSection(title)
 			local Section = {}
@@ -656,36 +656,43 @@ function Diq:CreateWindow(config)
 
 			local sectionFrame = Instance.new("Frame")
 			sectionFrame.Size = UDim2.new(1, 0, 0, 0)
-			sectionFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-			sectionFrame.BackgroundTransparency = 0.5
+			sectionFrame.BackgroundColor3 = Theme.ElementBg
+			sectionFrame.ClipsDescendants = true
 			sectionFrame.Parent = targetParent
 			ApplyCorner(sectionFrame, 8)
 			ApplyStroke(sectionFrame, Theme.Outline)
 
 			local sectionLayout = Instance.new("UIListLayout")
-			sectionLayout.Padding = UDim.new(0, 6)
+			sectionLayout.Padding = UDim.new(0, 0)
 			sectionLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 			sectionLayout.SortOrder = Enum.SortOrder.LayoutOrder
 			sectionLayout.Parent = sectionFrame
 
-			ApplyPadding(sectionFrame, 32, 8, 8, 8)
+			local titleContainer = Instance.new("Frame")
+			titleContainer.Size = UDim2.new(1, 0, 0, 30)
+			titleContainer.BackgroundColor3 = Theme.HoverBg
+			titleContainer.BackgroundTransparency = 0.5
+			titleContainer.BorderSizePixel = 0
+			titleContainer.Parent = sectionFrame
 
 			local titleLbl = Instance.new("TextLabel")
-			titleLbl.Size = UDim2.new(1, 0, 0, 20)
-			titleLbl.Position = UDim2.new(0, 0, 0, -28)
+			titleLbl.Size = UDim2.new(1, -24, 1, 0)
+			titleLbl.Position = UDim2.new(0, 12, 0, 0)
 			titleLbl.BackgroundTransparency = 1
 			titleLbl.Text = title
 			titleLbl.TextColor3 = Theme.Accent
 			titleLbl.Font = Enum.Font.GothamBold
 			titleLbl.TextSize = 12
 			titleLbl.TextXAlignment = Enum.TextXAlignment.Left
-			titleLbl.Parent = sectionFrame
+			titleLbl.Parent = titleContainer
 
 			connections:Track(sectionLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-				sectionFrame.Size = UDim2.new(1, 0, 0, sectionLayout.AbsoluteContentSize.Y + 40)
+				sectionFrame.Size = UDim2.new(1, 0, 0, sectionLayout.AbsoluteContentSize.Y)
 			end))
 
 			Section._content = sectionFrame
+			Section._isSection = true
+			Section._itemCount = 0
 			return Section
 		end
 
@@ -704,8 +711,26 @@ function Diq:CreateWindow(config)
 			frame.AutoButtonColor = false
 			frame.Text = ""
 			frame.Parent = targetParent
-			ApplyCorner(frame, 8)
-			local stroke = ApplyStroke(frame, Theme.Outline)
+			
+			local isSection = self and self._isSection
+			local stroke
+			
+			if isSection then
+				frame.BackgroundTransparency = 1
+				if self._itemCount and self._itemCount > 0 then
+					local sep = Instance.new("Frame")
+					sep.Size = UDim2.new(1, -24, 0, 1)
+					sep.Position = UDim2.new(0, 12, 0, 0)
+					sep.BackgroundColor3 = Theme.Outline
+					sep.BorderSizePixel = 0
+					sep.BackgroundTransparency = 0.5
+					sep.Parent = frame
+				end
+				if self._itemCount then self._itemCount = self._itemCount + 1 end
+			else
+				ApplyCorner(frame, 8)
+				stroke = ApplyStroke(frame, Theme.Outline)
+			end
 
 			-- Icon (ถ้ามี)
 			local hasIcon = config.Icon and AttachIcon(config.Icon, frame, 16, Theme.SubText, UDim2.new(0, 12, 0.5, -8))
@@ -722,13 +747,21 @@ function Diq:CreateWindow(config)
 			btn.Parent = frame
 
 			connections:Track(frame.MouseEnter:Connect(function()
-				Tween(frame, 0.2, { BackgroundColor3 = Theme.HoverBg })
-				Tween(stroke, 0.2, { Color = Theme.Accent })
+				if isSection then
+					Tween(frame, 0.2, { BackgroundTransparency = 0, BackgroundColor3 = Theme.HoverBg })
+				else
+					Tween(frame, 0.2, { BackgroundColor3 = Theme.HoverBg })
+					if stroke then Tween(stroke, 0.2, { Color = Theme.Accent }) end
+				end
 			end))
 
 			connections:Track(frame.MouseLeave:Connect(function()
-				Tween(frame, 0.2, { BackgroundColor3 = Theme.ElementBg })
-				Tween(stroke, 0.2, { Color = Theme.Outline })
+				if isSection then
+					Tween(frame, 0.2, { BackgroundTransparency = 1 })
+				else
+					Tween(frame, 0.2, { BackgroundColor3 = Theme.ElementBg })
+					if stroke then Tween(stroke, 0.2, { Color = Theme.Outline }) end
+				end
 			end))
 
 			connections:Track(frame.MouseButton1Click:Connect(function()
@@ -767,8 +800,25 @@ function Diq:CreateWindow(config)
 			frame.AutoButtonColor = false
 			frame.Text = ""
 			frame.Parent = targetParent
-			ApplyCorner(frame, 8)
-			ApplyStroke(frame, Theme.Outline)
+
+			local isSection = self and self._isSection
+			
+			if isSection then
+				frame.BackgroundTransparency = 1
+				if self._itemCount and self._itemCount > 0 then
+					local sep = Instance.new("Frame")
+					sep.Size = UDim2.new(1, -24, 0, 1)
+					sep.Position = UDim2.new(0, 12, 0, 0)
+					sep.BackgroundColor3 = Theme.Outline
+					sep.BorderSizePixel = 0
+					sep.BackgroundTransparency = 0.5
+					sep.Parent = frame
+				end
+				if self._itemCount then self._itemCount = self._itemCount + 1 end
+			else
+				ApplyCorner(frame, 8)
+				ApplyStroke(frame, Theme.Outline)
+			end
 
 			-- Icon (ถ้ามี)
 			local hasIcon = config.Icon and AttachIcon(config.Icon, frame, 16, Theme.SubText, UDim2.new(0, 10, 0.5, -8))
@@ -835,8 +885,25 @@ function Diq:CreateWindow(config)
 			frame.Size = UDim2.new(1, 0, 0, 52)
 			frame.BackgroundColor3 = Theme.ElementBg
 			frame.Parent = targetParent
-			ApplyCorner(frame, 8)
-			ApplyStroke(frame, Theme.Outline)
+
+			local isSection = self and self._isSection
+			
+			if isSection then
+				frame.BackgroundTransparency = 1
+				if self._itemCount and self._itemCount > 0 then
+					local sep = Instance.new("Frame")
+					sep.Size = UDim2.new(1, -24, 0, 1)
+					sep.Position = UDim2.new(0, 12, 0, 0)
+					sep.BackgroundColor3 = Theme.Outline
+					sep.BorderSizePixel = 0
+					sep.BackgroundTransparency = 0.5
+					sep.Parent = frame
+				end
+				if self._itemCount then self._itemCount = self._itemCount + 1 end
+			else
+				ApplyCorner(frame, 8)
+				ApplyStroke(frame, Theme.Outline)
+			end
 
 			local lbl = Instance.new("TextLabel")
 			lbl.Size = UDim2.new(1, -55, 0, 20)
@@ -1183,8 +1250,25 @@ function Diq:CreateWindow(config)
 			frame.Size = UDim2.new(1, 0, 0, 36)
 			frame.BackgroundColor3 = Theme.ElementBg
 			frame.Parent = targetParent
-			ApplyCorner(frame, 8)
-			ApplyStroke(frame, Theme.Outline)
+
+			local isSection = self and self._isSection
+			
+			if isSection then
+				frame.BackgroundTransparency = 1
+				if self._itemCount and self._itemCount > 0 then
+					local sep = Instance.new("Frame")
+					sep.Size = UDim2.new(1, -24, 0, 1)
+					sep.Position = UDim2.new(0, 12, 0, 0)
+					sep.BackgroundColor3 = Theme.Outline
+					sep.BorderSizePixel = 0
+					sep.BackgroundTransparency = 0.5
+					sep.Parent = frame
+				end
+				if self._itemCount then self._itemCount = self._itemCount + 1 end
+			else
+				ApplyCorner(frame, 8)
+				ApplyStroke(frame, Theme.Outline)
+			end
 
 			local lbl = Instance.new("TextLabel")
 			lbl.Size = UDim2.new(1, -95, 1, 0)
