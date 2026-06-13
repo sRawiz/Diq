@@ -26,20 +26,20 @@ local DiqIcons = nil -- จะโหลดทีหลังผ่าน Diq:Loa
 -- 🎨 Default Theme (Zinc / Indigo)
 -- ==========================================
 local DefaultTheme = {
-	Background  = Color3.fromRGB(18, 18, 22),
-	Sidebar     = Color3.fromRGB(24, 24, 30),
-	ElementBg   = Color3.fromRGB(35, 35, 42),
-	HoverBg     = Color3.fromRGB(50, 50, 60),
-	ActiveTab   = Color3.fromRGB(42, 42, 52),
-	Accent      = Color3.fromRGB(99, 102, 241),
-	AccentHover = Color3.fromRGB(120, 123, 255),
-	Text        = Color3.fromRGB(245, 245, 250),
-	SubText     = Color3.fromRGB(140, 140, 160),
-	DimText     = Color3.fromRGB(100, 100, 120),
-	Outline     = Color3.fromRGB(50, 50, 60),
-	SliderBg    = Color3.fromRGB(40, 40, 50),
-	InputBg     = Color3.fromRGB(28, 28, 35),
-	NotifyBg    = Color3.fromRGB(30, 30, 38),
+	Background  = Color3.fromRGB(18, 18, 20),   -- #121214
+	Sidebar     = Color3.fromRGB(26, 26, 30),   -- #1A1A1E
+	ElementBg   = Color3.fromRGB(36, 36, 41),   -- #242429
+	HoverBg     = Color3.fromRGB(44, 45, 50),   -- #2C2D32
+	ActiveTab   = Color3.fromRGB(44, 45, 50),   -- #2C2D32
+	Accent      = Color3.fromRGB(84, 98, 239),  -- #5462EF (Blurple)
+	AccentHover = Color3.fromRGB(104, 118, 255),
+	Text        = Color3.fromRGB(219, 222, 225),-- #DBDEE1 (Discord Chat Text)
+	SubText     = Color3.fromRGB(150, 151, 158),-- #96979E
+	DimText     = Color3.fromRGB(110, 111, 118),
+	Outline     = Color3.fromRGB(44, 45, 50),   -- #2C2D32
+	SliderBg    = Color3.fromRGB(26, 26, 30),   -- #1A1A1E
+	InputBg     = Color3.fromRGB(26, 26, 30),   -- #1A1A1E
+	NotifyBg    = Color3.fromRGB(36, 36, 41),   -- #242429
 	Success     = Color3.fromRGB(34, 197, 94),
 	Warning     = Color3.fromRGB(250, 204, 21),
 	Error       = Color3.fromRGB(239, 68, 68),
@@ -578,12 +578,12 @@ function Diq:CreateWindow(config)
 		content.Parent = ContentArea
 
 		local contentLayout = Instance.new("UIListLayout")
-		contentLayout.Padding = UDim.new(0, 8)
+		contentLayout.Padding = UDim.new(0, 10) -- เพิ่มระยะห่างระหว่างแต่ละ Element เป็น 10
 		contentLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 		contentLayout.SortOrder = Enum.SortOrder.LayoutOrder
 		contentLayout.Parent = content
 
-		ApplyPadding(content, 4, 4, 0, 0)
+		ApplyPadding(content, 8, 8, 4, 4) -- Top, Bottom, Left, Right (เพิ่มพื้นที่ขอบบนล่างซ้ายขวา)
 
 		connections:Track(contentLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
 			content.CanvasSize = UDim2.new(0, 0, 0, contentLayout.AbsoluteContentSize.Y + 15)
@@ -615,18 +615,18 @@ function Diq:CreateWindow(config)
 			local targetParent = (self and self._content) or content
 
 			local frame = Instance.new("Frame")
-			frame.Size = UDim2.new(1, 0, 0, 22)
+			frame.Size = UDim2.new(1, 0, 0, 28) -- เพิ่มความสูงให้ Label มีที่หายใจมากขึ้น
 			frame.BackgroundTransparency = 1
 			frame.Parent = targetParent
 
 			local lbl = Instance.new("TextLabel")
 			lbl.Size = UDim2.new(1, -5, 1, 0)
-			lbl.Position = UDim2.new(0, 5, 0, 0)
+			lbl.Position = UDim2.new(0, 5, 0, 4) -- เลื่อนลงมานิดนึงให้ดูไม่ชิดขอบบน
 			lbl.BackgroundTransparency = 1
 			lbl.Text = text
 			lbl.TextColor3 = Theme.DimText
 			lbl.Font = Enum.Font.GothamBold
-			lbl.TextSize = 11
+			lbl.TextSize = 12 -- ขยาย Font ให้เด่นขึ้นนิดหน่อย
 			lbl.TextXAlignment = Enum.TextXAlignment.Left
 			lbl.Parent = frame
 
