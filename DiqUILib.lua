@@ -301,6 +301,13 @@ function Diq:CreateWindow(config)
 	local activeTab = nil
 	local isVisible = true
 	local isMinimized = false
+	Window._elements = {} -- เก็บ element ทุกตัวที่มี state เพื่อไว้ทำ Reset
+	
+	function Window:ResetAll()
+		for _, element in ipairs(self._elements) do
+			if element.Reset then element:Reset() end
+		end
+	end
 
 	-- ==========================================
 	-- ลบ UI เก่าที่ค้างอยู่
@@ -649,14 +656,15 @@ function Diq:CreateWindow(config)
 		end
 
 		-- ======================================
-		-- 💳 CreateProfileCard — การ์ดโปรไฟล์มีรูป Avatar
+		-- 💳 CreateProfileCard — การ์ดโปรไฟล์มีรูป Avatar พร้อม Map และ Play Time
 		-- ======================================
 		function Tab:CreateProfileCard(playerName, executorName, userId)
 			local obj = {}
 			local targetParent = (self and self._content) or content
+			local sessionStart = tick()
 
 			local frame = Instance.new("Frame")
-			frame.Size = UDim2.new(1, 0, 0, 64)
+			frame.Size = UDim2.new(1, 0, 0, 92)
 			frame.BackgroundColor3 = Theme.ElementBg
 			frame.Parent = targetParent
 			ApplyCorner(frame, 8)
@@ -664,17 +672,17 @@ function Diq:CreateWindow(config)
 
 			-- รูป Avatar (วงกลม)
 			local avatar = Instance.new("ImageLabel")
-			avatar.Size = UDim2.new(0, 44, 0, 44)
-			avatar.Position = UDim2.new(0, 10, 0.5, -22)
+			avatar.Size = UDim2.new(0, 56, 0, 56)
+			avatar.Position = UDim2.new(0, 12, 0.5, -28)
 			avatar.BackgroundColor3 = Theme.HoverBg
 			avatar.Image = "rbxthumb://type=AvatarHeadShot&id=" .. tostring(userId) .. "&w=150&h=150"
 			avatar.Parent = frame
-			ApplyCorner(avatar, 22)
+			ApplyCorner(avatar, 28)
 
 			-- ชื่อผู้เล่น
 			local nameLbl = Instance.new("TextLabel")
-			nameLbl.Size = UDim2.new(1, -70, 0, 20)
-			nameLbl.Position = UDim2.new(0, 64, 0, 12)
+			nameLbl.Size = UDim2.new(1, -85, 0, 18)
+			nameLbl.Position = UDim2.new(0, 80, 0, 10)
 			nameLbl.BackgroundTransparency = 1
 			nameLbl.Text = playerName
 			nameLbl.TextColor3 = Theme.Text
@@ -685,8 +693,8 @@ function Diq:CreateWindow(config)
 
 			-- ชื่อ Executor
 			local execLbl = Instance.new("TextLabel")
-			execLbl.Size = UDim2.new(1, -70, 0, 16)
-			execLbl.Position = UDim2.new(0, 64, 0, 34)
+			execLbl.Size = UDim2.new(1, -85, 0, 16)
+			execLbl.Position = UDim2.new(0, 80, 0, 30)
 			execLbl.BackgroundTransparency = 1
 			execLbl.Text = "Using: " .. (executorName or "Unknown")
 			execLbl.TextColor3 = Theme.Accent
@@ -694,6 +702,54 @@ function Diq:CreateWindow(config)
 			execLbl.TextSize = 12
 			execLbl.TextXAlignment = Enum.TextXAlignment.Left
 			execLbl.Parent = frame
+
+			-- Map Name
+			local mapLbl = Instance.new("TextLabel")
+			mapLbl.Size = UDim2.new(1, -85, 0, 16)
+			mapLbl.Position = UDim2.new(0, 80, 0, 48)
+			mapLbl.BackgroundTransparency = 1
+			mapLbl.Text = "Map: Loading..."
+			mapLbl.TextColor3 = Theme.SubText
+			mapLbl.Font = Enum.Font.Gotham
+			mapLbl.TextSize = 11
+			mapLbl.TextXAlignment = Enum.TextXAlignment.Left
+			mapLbl.Parent = frame
+
+			-- Play Time
+			local timeLbl = Instance.new("TextLabel")
+			timeLbl.Size = UDim2.new(1, -85, 0, 16)
+			timeLbl.Position = UDim2.new(0, 80, 0, 64)
+			timeLbl.BackgroundTransparency = 1
+			timeLbl.Text = "Session: 00:00:00"
+			timeLbl.TextColor3 = Theme.SubText
+			timeLbl.Font = Enum.Font.Gotham
+			timeLbl.TextSize = 11
+			timeLbl.TextXAlignment = Enum.TextXAlignment.Left
+			timeLbl.Parent = frame
+
+			-- ดึงชื่อ Map แบบ Asynchronous
+			task.spawn(function()
+				local success, info = pcall(function()
+					return game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId)
+				end)
+				if success and info and info.Name then
+					mapLbl.Text = "Map: " .. info.Name
+				else
+					mapLbl.Text = "Map: Unknown"
+				end
+			end)
+
+			-- อัปเดตเวลา Session Time (เดินตลอดเวลา)
+			task.spawn(function()
+				while task.wait(1) do
+					if not frame.Parent then break end -- กัน Memory Leak ถ้า UI โดนลบ
+					local elapsed = tick() - sessionStart
+					local hrs = math.floor(elapsed / 3600)
+					local mins = math.floor((elapsed % 3600) / 60)
+					local secs = math.floor(elapsed % 60)
+					timeLbl.Text = string.format("Session: %02d:%02d:%02d", hrs, mins, secs)
+				end
+			end)
 
 			function obj:SetVisible(v) frame.Visible = v end
 			function obj:Destroy() frame:Destroy() end
@@ -1078,9 +1134,12 @@ function Diq:CreateWindow(config)
 
 			function obj:Set(v) toggled = v; UpdateVisual(); if callback then task.spawn(callback, toggled) end end
 			function obj:Get() return toggled end
+			function obj:Reset() obj:Set(default or false) end
 			function obj:SetText(t) lbl.Text = t end
 			function obj:SetVisible(v) frame.Visible = v end
 			function obj:Destroy() frame:Destroy() end
+			
+			table.insert(Window._elements, obj)
 			return obj
 		end
 
@@ -1228,9 +1287,12 @@ function Diq:CreateWindow(config)
 
 			function obj:Set(v) UpdateSlider(v) end
 			function obj:Get() return value end
+			function obj:Reset() obj:Set(default or min) end
 			function obj:SetText(t) lbl.Text = t end
 			function obj:SetVisible(v) frame.Visible = v end
 			function obj:Destroy() frame:Destroy() end
+			
+			table.insert(Window._elements, obj)
 			return obj
 		end
 
@@ -1399,9 +1461,12 @@ function Diq:CreateWindow(config)
 				if callback then task.spawn(callback, selected) end
 			end
 			function obj:Get() return selected end
+			function obj:Reset() obj:Set(default or (options and options[1]) or "") end
 			function obj:SetOptions(newOpts) options = newOpts; BuildOptions() end
 			function obj:SetVisible(v) frame.Visible = v end
 			function obj:Destroy() frame:Destroy() end
+			
+			table.insert(Window._elements, obj)
 			return obj
 		end
 
@@ -1458,9 +1523,12 @@ function Diq:CreateWindow(config)
 
 			function obj:Set(t) inputBox.Text = t end
 			function obj:Get() return inputBox.Text end
+			function obj:Reset() obj:Set("") end
 			function obj:SetPlaceholder(t) inputBox.PlaceholderText = t end
 			function obj:SetVisible(v) frame.Visible = v end
 			function obj:Destroy() frame:Destroy() end
+			
+			table.insert(Window._elements, obj)
 			return obj
 		end
 

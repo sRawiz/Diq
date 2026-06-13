@@ -284,6 +284,13 @@ settingsTab:CreateButton("Rejoin Server", function()
 	end)
 end, { Icon = "rotate-cw" })
 
+settingsTab:CreateLabel("DANGER ZONE")
+
+settingsTab:CreateButton("Reset All Settings", function()
+	MyWindow:ResetAll()
+	DiqUI:Notify("Reset Complete", "All settings restored to defaults", 3, "success")
+end, { Icon = "rotate-ccw" })
+
 settingsTab:CreateLabel("ABOUT")
 
 settingsTab:CreateButton("About Diq Panel", function()
