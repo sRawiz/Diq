@@ -706,26 +706,35 @@ function Diq:CreateWindow(config)
 		end
 
 		-- ======================================
-		-- 🔄 CreateToggle — สวิตช์เปิด/ปิด
+		-- 🔄 CreateToggle — สวิตช์เปิด/ปิด (รองรับ Keybind & Slider ในตัว)
 		-- ======================================
 		function Tab:CreateToggle(text, default, callback, config)
 			local obj = {}
 			local toggled = default or false
 			config = config or {}
 
+			local frameHeight = 36
+			if config.Slider then frameHeight = frameHeight + 46 end
+
 			local frame = Instance.new("Frame")
-			frame.Size = UDim2.new(1, 0, 0, 36)
+			frame.Size = UDim2.new(1, 0, 0, frameHeight)
 			frame.BackgroundColor3 = Theme.ElementBg
 			frame.Parent = content
 			ApplyCorner(frame, 8)
 			ApplyStroke(frame, Theme.Outline)
 
+			-- Top area
+			local topArea = Instance.new("Frame")
+			topArea.Size = UDim2.new(1, 0, 0, 36)
+			topArea.BackgroundTransparency = 1
+			topArea.Parent = frame
+
 			-- Icon (ถ้ามี)
-			local hasIcon = config.Icon and AttachIcon(config.Icon, frame, 16, Theme.SubText, UDim2.new(0, 10, 0.5, -8))
+			local hasIcon = config.Icon and AttachIcon(config.Icon, topArea, 16, Theme.SubText, UDim2.new(0, 10, 0.5, -8))
 			local textPadLeft = hasIcon and 32 or 12
 
 			local lbl = Instance.new("TextLabel")
-			lbl.Size = UDim2.new(1, -60, 1, 0)
+			lbl.Size = UDim2.new(1, -120, 1, 0)
 			lbl.Position = UDim2.new(0, textPadLeft, 0, 0)
 			lbl.BackgroundTransparency = 1
 			lbl.Text = text
@@ -733,7 +742,7 @@ function Diq:CreateWindow(config)
 			lbl.Font = Enum.Font.GothamMedium
 			lbl.TextSize = 13
 			lbl.TextXAlignment = Enum.TextXAlignment.Left
-			lbl.Parent = frame
+			lbl.Parent = topArea
 
 			-- พื้นหลังสวิตช์
 			local switchBg = Instance.new("Frame")
@@ -741,10 +750,9 @@ function Diq:CreateWindow(config)
 			switchBg.Position = UDim2.new(1, -48, 0.5, -9)
 			switchBg.BackgroundColor3 = toggled and Theme.Accent or Theme.SliderBg
 			switchBg.BorderSizePixel = 0
-			switchBg.Parent = frame
+			switchBg.Parent = topArea
 			ApplyCorner(switchBg, 9)
 
-			-- ปุ่มกลม (knob)
 			local knob = Instance.new("Frame")
 			knob.Size = UDim2.new(0, 12, 0, 12)
 			knob.Position = UDim2.new(0, toggled and 21 or 3, 0.5, -6)
@@ -757,11 +765,157 @@ function Diq:CreateWindow(config)
 			btn.Size = UDim2.new(1, 0, 1, 0)
 			btn.BackgroundTransparency = 1
 			btn.Text = ""
-			btn.Parent = frame
+			btn.Parent = topArea
 
 			local function UpdateVisual()
 				Tween(switchBg, 0.25, { BackgroundColor3 = toggled and Theme.Accent or Theme.SliderBg })
 				Tween(knob, 0.25, { Position = UDim2.new(0, toggled and 21 or 3, 0.5, -6) })
+			end
+
+			-- KEYBIND (ถ้ามี)
+			local currentKey = config.Keybind and config.Keybind.Default
+			if config.Keybind then
+				local keyBtn = Instance.new("TextButton")
+				keyBtn.Size = UDim2.new(0, 32, 0, 20)
+				keyBtn.Position = UDim2.new(1, -90, 0.5, -10)
+				keyBtn.BackgroundColor3 = Theme.Background
+				keyBtn.Text = currentKey and "[" .. currentKey.Name .. "]" or "[None]"
+				keyBtn.TextColor3 = Theme.SubText
+				keyBtn.Font = Enum.Font.GothamBold
+				keyBtn.TextSize = 11
+				keyBtn.ZIndex = 2
+				keyBtn.Parent = topArea
+				ApplyCorner(keyBtn, 4)
+				ApplyStroke(keyBtn, Theme.Outline)
+
+				local listening = false
+				connections:Track(keyBtn.MouseButton1Click:Connect(function()
+					listening = true
+					keyBtn.Text = "..."
+					Tween(keyBtn, 0.2, { BackgroundColor3 = Theme.Accent, TextColor3 = Theme.Background })
+				end))
+
+				connections:Track(UserInputService.InputBegan:Connect(function(input, gp)
+					if listening and input.UserInputType == Enum.UserInputType.Keyboard then
+						listening = false
+						currentKey = input.KeyCode
+						keyBtn.Text = "[" .. currentKey.Name .. "]"
+						Tween(keyBtn, 0.2, { BackgroundColor3 = Theme.Background, TextColor3 = Theme.SubText })
+						if config.Keybind.Callback then task.spawn(config.Keybind.Callback, currentKey) end
+					elseif not listening and input.KeyCode == currentKey and not gp then
+						-- Auto toggle on hotkey!
+						toggled = not toggled
+						UpdateVisual()
+						if callback then task.spawn(callback, toggled) end
+					end
+				end))
+			end
+
+			-- SLIDER (ถ้ามี)
+			if config.Slider then
+				local sMin = config.Slider.Min or 0
+				local sMax = config.Slider.Max or 100
+				local sValue = math.clamp(config.Slider.Default or sMin, sMin, sMax)
+				local sCb = config.Slider.Callback
+				local sliding = false
+
+				local sliderArea = Instance.new("Frame")
+				sliderArea.Size = UDim2.new(1, 0, 0, 46)
+				sliderArea.Position = UDim2.new(0, 0, 0, 36)
+				sliderArea.BackgroundTransparency = 1
+				sliderArea.Parent = frame
+
+				local sep = Instance.new("Frame")
+				sep.Size = UDim2.new(1, -24, 0, 1)
+				sep.Position = UDim2.new(0, 12, 0, 0)
+				sep.BackgroundColor3 = Theme.Outline
+				sep.BackgroundTransparency = 0.5
+				sep.BorderSizePixel = 0
+				sep.Parent = sliderArea
+
+				local sLbl = Instance.new("TextLabel")
+				sLbl.Size = UDim2.new(1, -60, 0, 16)
+				sLbl.Position = UDim2.new(0, textPadLeft, 0, 6)
+				sLbl.BackgroundTransparency = 1
+				sLbl.Text = config.Slider.Text or "Speed"
+				sLbl.TextColor3 = Theme.SubText
+				sLbl.Font = Enum.Font.GothamMedium
+				sLbl.TextSize = 11
+				sLbl.TextXAlignment = Enum.TextXAlignment.Left
+				sLbl.Parent = sliderArea
+
+				local valInput = Instance.new("TextBox")
+				valInput.Size = UDim2.new(0, 35, 0, 16)
+				valInput.Position = UDim2.new(1, -48, 0, 6)
+				valInput.BackgroundColor3 = Theme.Background
+				valInput.Text = tostring(math.floor(sValue))
+				valInput.TextColor3 = Theme.Accent
+				valInput.Font = Enum.Font.GothamBold
+				valInput.TextSize = 10
+				valInput.TextXAlignment = Enum.TextXAlignment.Center
+				valInput.ClearTextOnFocus = false
+				valInput.Parent = sliderArea
+				ApplyCorner(valInput, 4)
+				ApplyStroke(valInput, Theme.Outline)
+
+				local track = Instance.new("Frame")
+				track.Size = UDim2.new(1, -24, 0, 5)
+				track.Position = UDim2.new(0, 12, 0, 28)
+				track.BackgroundColor3 = Theme.SliderBg
+				track.BorderSizePixel = 0
+				track.Parent = sliderArea
+				ApplyCorner(track, 3)
+
+				local fill = Instance.new("Frame")
+				fill.Size = UDim2.new((sValue - sMin) / math.max(sMax - sMin, 1), 0, 1, 0)
+				fill.BackgroundColor3 = Theme.Accent
+				fill.BorderSizePixel = 0
+				fill.Parent = track
+				ApplyCorner(fill, 3)
+
+				local sKnob = Instance.new("Frame")
+				sKnob.Size = UDim2.new(0, 10, 0, 10)
+				sKnob.Position = UDim2.new((sValue - sMin) / math.max(sMax - sMin, 1), -5, 0.5, -5)
+				sKnob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+				sKnob.BorderSizePixel = 0
+				sKnob.Parent = track
+				ApplyCorner(sKnob, 5)
+
+				local hitArea = Instance.new("TextButton")
+				hitArea.Size = UDim2.new(1, -24, 0, 18)
+				hitArea.Position = UDim2.new(0, 12, 0, 20)
+				hitArea.BackgroundTransparency = 1
+				hitArea.Text = ""
+				hitArea.ZIndex = 3
+				hitArea.Parent = sliderArea
+
+				local function UpdateSlider(newValue)
+					sValue = math.clamp(math.floor(newValue), sMin, sMax)
+					local ratio = (sValue - sMin) / math.max(sMax - sMin, 1)
+					fill.Size = UDim2.new(ratio, 0, 1, 0)
+					sKnob.Position = UDim2.new(ratio, -5, 0.5, -5)
+					valInput.Text = tostring(sValue)
+					if sCb then task.spawn(sCb, sValue) end
+				end
+
+				connections:Track(valInput.FocusLost:Connect(function()
+					local parsed = tonumber(valInput.Text)
+					if parsed then UpdateSlider(parsed) else valInput.Text = tostring(sValue) end
+				end))
+
+				connections:Track(hitArea.InputBegan:Connect(function(input)
+					if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+						sliding = true
+						local ratio = math.clamp((input.Position.X - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
+						UpdateSlider(sMin + (sMax - sMin) * ratio)
+					end
+				end))
+
+				connections:Track(UserInputService.InputEnded:Connect(function(input)
+					if sliding and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
+						sliding = false
+					end
+				end))
 			end
 
 			connections:Track(btn.MouseButton1Click:Connect(function()

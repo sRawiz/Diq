@@ -33,68 +33,73 @@ local MyWindow = DiqUI:CreateWindow({
 -- ==========================================
 local movementTab = MyWindow:CreateTab("Movement", "move")
 
-movementTab:CreateLabel("FLY & SPEED")
+movementTab:CreateLabel("MOVEMENT SETTINGS")
 
-local flyToggle = movementTab:CreateToggle("CFrame Fly", false, function(state)
+local flyToggle
+flyToggle = movementTab:CreateToggle("CFrame Fly", false, function(state)
 	Movement.SetFly(state)
-end, { Icon = "plane" })
+	DiqUI:Notify(
+		state and "Fly Enabled" or "Fly Disabled",
+		state and "Press key to disable" or "Returned to normal",
+		2,
+		state and "info" or "warning"
+	)
+end, { 
+	Icon = "plane",
+	Keybind = {
+		Default = Enum.KeyCode.F,
+	},
+	Slider = {
+		Text = "Fly Speed",
+		Min = 10,
+		Max = 500,
+		Default = 100,
+		Callback = function(val) Movement.SetFlySpeed(val) end
+	}
+})
 
-local speedToggle = movementTab:CreateToggle("CFrame Speed", false, function(state)
+local speedToggle
+speedToggle = movementTab:CreateToggle("CFrame Speed", false, function(state)
 	Movement.SetSpeed(state)
-end, { Icon = "zap" })
+	DiqUI:Notify(
+		state and "Speed Enabled" or "Speed Disabled",
+		state and "Press key to disable" or "Returned to normal",
+		2,
+		state and "info" or "warning"
+	)
+end, { 
+	Icon = "zap",
+	Keybind = {
+		Default = Enum.KeyCode.G,
+	},
+	Slider = {
+		Text = "Walk Speed",
+		Min = 10,
+		Max = 300,
+		Default = 60,
+		Callback = function(val) Movement.SetCFrameSpeed(val) end
+	}
+})
 
-local infJumpToggle = movementTab:CreateToggle("Infinity Jump", false, function(state)
+movementTab:CreateToggle("Infinity Jump", false, function(state)
 	Movement.SetInfinityJump(state)
 end, { Icon = "chevron-up" })
 
-local noClipToggle = movementTab:CreateToggle("NoClip", false, function(state)
+local noClipToggle
+noClipToggle = movementTab:CreateToggle("NoClip", false, function(state)
 	Movement.SetNoClip(state)
-end, { Icon = "ghost" })
-
-movementTab:CreateLabel("KEYBINDS")
-
-movementTab:CreateKeybind("Toggle Fly Keybind", Enum.KeyCode.F, function()
-	local isFlying = Movement.ToggleFly()
-	flyToggle:Set(isFlying)
 	DiqUI:Notify(
-		isFlying and "Fly Enabled" or "Fly Disabled",
-		isFlying and "Press key again to disable" or "Returned to normal mode",
+		state and "NoClip Enabled" or "NoClip Disabled",
+		state and "You can walk through walls" or "Collision restored",
 		2,
-		isFlying and "info" or "warning"
+		state and "info" or "warning"
 	)
-end)
-
-movementTab:CreateKeybind("Toggle Speed Keybind", Enum.KeyCode.G, function()
-	local isSpeed = Movement.ToggleSpeed()
-	speedToggle:Set(isSpeed)
-	DiqUI:Notify(
-		isSpeed and "Speed Enabled" or "Speed Disabled",
-		isSpeed and "Press key again to disable" or "Returned to normal speed",
-		2,
-		isSpeed and "info" or "warning"
-	)
-end)
-
-movementTab:CreateKeybind("Toggle NoClip Keybind", Enum.KeyCode.V, function()
-	local isNoClip = Movement.ToggleNoClip()
-	noClipToggle:Set(isNoClip)
-	DiqUI:Notify(
-		isNoClip and "NoClip Enabled" or "NoClip Disabled",
-		isNoClip and "You can walk through walls" or "Collision restored",
-		2,
-		isNoClip and "info" or "warning"
-	)
-end)
-
-movementTab:CreateLabel("SETTINGS")
-
-movementTab:CreateSlider("Fly Speed", 10, 500, 100, function(value)
-	Movement.SetFlySpeed(value)
-end)
-
-movementTab:CreateSlider("Walk Speed", 10, 300, 60, function(value)
-	Movement.SetCFrameSpeed(value)
-end)
+end, { 
+	Icon = "ghost",
+	Keybind = {
+		Default = Enum.KeyCode.V,
+	}
+})
 
 movementTab:CreateLabel("ACTIONS")
 
