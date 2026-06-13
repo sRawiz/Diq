@@ -354,6 +354,7 @@ function Diq:CreateWindow(config)
 	TopBar.BackgroundColor3 = Theme.Sidebar
 	TopBar.BorderSizePixel = 0
 	TopBar.Parent = MainFrame
+	ApplyCorner(TopBar, 10)
 
 	-- ปิดมุมล่างของ TopBar (ให้เป็นเหลี่ยม)
 	local topBarCover = Instance.new("Frame")
@@ -384,19 +385,20 @@ function Diq:CreateWindow(config)
 	MinBtn.Size = UDim2.new(0, 26, 0, 26)
 	MinBtn.Position = UDim2.new(1, -62, 0.5, -13)
 	MinBtn.BackgroundColor3 = Theme.ElementBg
-	MinBtn.Text = "─"
-	MinBtn.TextColor3 = Theme.SubText
-	MinBtn.Font = Enum.Font.GothamBold
-	MinBtn.TextSize = 14
+	MinBtn.Text = ""
 	MinBtn.AutoButtonColor = false
 	MinBtn.Parent = TopBar
 	ApplyCorner(MinBtn, 6)
+	
+	local minIcon = AttachIcon("minus", MinBtn, 14, Theme.SubText, UDim2.new(0.5, -7, 0.5, -7))
 
 	connections:Track(MinBtn.MouseEnter:Connect(function()
-		Tween(MinBtn, 0.2, { BackgroundColor3 = Theme.Warning, TextColor3 = Theme.Background })
+		Tween(MinBtn, 0.2, { BackgroundColor3 = Theme.Warning })
+		if minIcon then Tween(minIcon, 0.2, { ImageColor3 = Theme.Background }) end
 	end))
 	connections:Track(MinBtn.MouseLeave:Connect(function()
-		Tween(MinBtn, 0.2, { BackgroundColor3 = Theme.ElementBg, TextColor3 = Theme.SubText })
+		Tween(MinBtn, 0.2, { BackgroundColor3 = Theme.ElementBg })
+		if minIcon then Tween(minIcon, 0.2, { ImageColor3 = Theme.SubText }) end
 	end))
 
 	-- ==========================================
@@ -406,19 +408,20 @@ function Diq:CreateWindow(config)
 	CloseBtn.Size = UDim2.new(0, 26, 0, 26)
 	CloseBtn.Position = UDim2.new(1, -32, 0.5, -13)
 	CloseBtn.BackgroundColor3 = Theme.ElementBg
-	CloseBtn.Text = "✕"
-	CloseBtn.TextColor3 = Theme.SubText
-	CloseBtn.Font = Enum.Font.GothamBold
-	CloseBtn.TextSize = 12
+	CloseBtn.Text = ""
 	CloseBtn.AutoButtonColor = false
 	CloseBtn.Parent = TopBar
 	ApplyCorner(CloseBtn, 6)
+	
+	local closeIcon = AttachIcon("x", CloseBtn, 14, Theme.SubText, UDim2.new(0.5, -7, 0.5, -7))
 
 	connections:Track(CloseBtn.MouseEnter:Connect(function()
-		Tween(CloseBtn, 0.2, { BackgroundColor3 = Theme.Error, TextColor3 = Theme.Text })
+		Tween(CloseBtn, 0.2, { BackgroundColor3 = Theme.Error })
+		if closeIcon then Tween(closeIcon, 0.2, { ImageColor3 = Theme.Text }) end
 	end))
 	connections:Track(CloseBtn.MouseLeave:Connect(function()
-		Tween(CloseBtn, 0.2, { BackgroundColor3 = Theme.ElementBg, TextColor3 = Theme.SubText })
+		Tween(CloseBtn, 0.2, { BackgroundColor3 = Theme.ElementBg })
+		if closeIcon then Tween(closeIcon, 0.2, { ImageColor3 = Theme.SubText }) end
 	end))
 
 	-- ==========================================
@@ -801,16 +804,19 @@ function Diq:CreateWindow(config)
 			lbl.TextXAlignment = Enum.TextXAlignment.Left
 			lbl.Parent = frame
 
-			local valLbl = Instance.new("TextLabel")
-			valLbl.Size = UDim2.new(0, 45, 0, 20)
-			valLbl.Position = UDim2.new(1, -52, 0, 4)
-			valLbl.BackgroundTransparency = 1
-			valLbl.Text = tostring(math.floor(value))
-			valLbl.TextColor3 = Theme.Accent
-			valLbl.Font = Enum.Font.GothamBold
-			valLbl.TextSize = 13
-			valLbl.TextXAlignment = Enum.TextXAlignment.Right
-			valLbl.Parent = frame
+			local valInput = Instance.new("TextBox")
+			valInput.Size = UDim2.new(0, 45, 0, 20)
+			valInput.Position = UDim2.new(1, -55, 0, 6)
+			valInput.BackgroundColor3 = Theme.Background
+			valInput.Text = tostring(math.floor(value))
+			valInput.TextColor3 = Theme.Accent
+			valInput.Font = Enum.Font.GothamBold
+			valInput.TextSize = 12
+			valInput.TextXAlignment = Enum.TextXAlignment.Center
+			valInput.ClearTextOnFocus = false
+			valInput.Parent = frame
+			ApplyCorner(valInput, 4)
+			ApplyStroke(valInput, Theme.Outline)
 
 			-- แท่งพื้นหลัง
 			local track = Instance.new("Frame")
@@ -853,9 +859,18 @@ function Diq:CreateWindow(config)
 				local ratio = (value - min) / math.max(max - min, 1)
 				fill.Size = UDim2.new(ratio, 0, 1, 0)
 				sliderKnob.Position = UDim2.new(ratio, -6, 0.5, -6)
-				valLbl.Text = tostring(value)
+				valInput.Text = tostring(value)
 				if callback then task.spawn(callback, value) end
 			end
+
+			connections:Track(valInput.FocusLost:Connect(function()
+				local parsed = tonumber(valInput.Text)
+				if parsed then
+					UpdateSlider(parsed)
+				else
+					valInput.Text = tostring(value)
+				end
+			end))
 
 			connections:Track(hitArea.InputBegan:Connect(function(input)
 				if input.UserInputType == Enum.UserInputType.MouseButton1
