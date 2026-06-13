@@ -18,6 +18,7 @@ local DiqIcons = loadstring(game:HttpGet(BASE_URL .. "DiqIcons.lua?_=" .. tostri
 local Movement = loadstring(game:HttpGet(BASE_URL .. "MovementSystem.lua?_=" .. tostring(tick())))()
 local ESP      = loadstring(game:HttpGet(BASE_URL .. "ESPSystem.lua?_=" .. tostring(tick())))()
 local Aimbot   = loadstring(game:HttpGet(BASE_URL .. "AimbotSystem.lua?_=" .. tostring(tick())))()
+local Hitbox   = loadstring(game:HttpGet(BASE_URL .. "HitboxSystem.lua?_=" .. tostring(tick())))()
 local Misc     = loadstring(game:HttpGet(BASE_URL .. "MiscSystem.lua?_=" .. tostring(tick())))()
 
 -- ⭐ โหลด Icon เข้า Library (ทำครั้งเดียว)
@@ -164,10 +165,33 @@ combatTab:CreateDropdown("Aim Part", { "Head", "Torso", "HumanoidRootPart" }, "H
 	Aimbot.SetAimPart(selected)
 end)
 
+combatTab:CreateLabel("HITBOX EXPANDER")
+
+combatTab:CreateToggle("Enable Hitbox Expander", false, function(state)
+	Hitbox.SetEnabled(state)
+	if state then
+		DiqUI:Notify("Hitbox Enabled", "Enemy hitboxes are now expanded", 2, "info")
+	end
+end, { Icon = "maximize" })
+
+combatTab:CreateSlider("Hitbox Size", 2, 20, 5, function(value)
+	Hitbox.SetSize(value)
+end)
+
+combatTab:CreateSlider("Transparency", 0, 100, 50, function(value)
+    -- Map 0-100 to 0-1
+	Hitbox.SetTransparency(value / 100)
+end)
+
+combatTab:CreateDropdown("Target Part", { "Head", "HumanoidRootPart" }, "Head", function(selected)
+	Hitbox.SetTargetPart(selected)
+end)
+
 combatTab:CreateLabel("CHECKS")
 
 combatTab:CreateToggle("Team Check", true, function(state)
 	Aimbot.SetTeamCheck(state)
+	Hitbox.SetTeamCheck(state)
 end, { Icon = "users" })
 
 combatTab:CreateToggle("Wall Check (Visible Only)", false, function(state)
