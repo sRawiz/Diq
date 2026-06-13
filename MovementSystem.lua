@@ -223,6 +223,36 @@ function Movement.Unanchor()
 	end
 end
 
+-- เปิด/ปิด ป้องกันโดนชนปลิว (NoFling)
+local noFlingConnection = nil
+function Movement.SetNoFling(enable)
+	State.IsNoFling = enable
+	if enable and not noFlingConnection then
+		noFlingConnection = RunService.Stepped:Connect(function()
+			if State.IsNoFling then
+				for _, player in ipairs(Players:GetPlayers()) do
+					if player ~= LocalPlayer and player.Character then
+						for _, part in ipairs(player.Character:GetDescendants()) do
+							if part:IsA("BasePart") then
+								part.CanCollide = false
+							end
+						end
+					end
+				end
+			end
+		end)
+	elseif not enable and noFlingConnection then
+		noFlingConnection:Disconnect()
+		noFlingConnection = nil
+	end
+end
+
+-- สลับสถานะ NoFling
+function Movement.ToggleNoFling()
+	Movement.SetNoFling(not State.IsNoFling)
+	return State.IsNoFling
+end
+
 -- ดึงสถานะปัจจุบัน
 function Movement.GetState()
 	return {
@@ -240,10 +270,15 @@ LocalPlayer.CharacterAdded:Connect(function()
 	State.IsFlying = false
 	State.IsCFrameSpeed = false
 	State.IsNoClip = false
+	State.IsNoFling = false
 	UpdateRenderConnection()
 	if noClipConnection then
 		noClipConnection:Disconnect()
 		noClipConnection = nil
+	end
+	if noFlingConnection then
+		noFlingConnection:Disconnect()
+		noFlingConnection = nil
 	end
 end)
 

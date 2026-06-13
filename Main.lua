@@ -101,6 +101,22 @@ end, {
 	}
 })
 
+local noFlingToggle
+noFlingToggle = movementTab:CreateToggle("Anti-Fling", false, function(state)
+	Movement.SetNoFling(state)
+	DiqUI:Notify(
+		state and "Anti-Fling Enabled" or "Anti-Fling Disabled",
+		state and "Other players cannot fling you" or "Normal physics restored",
+		2,
+		state and "info" or "warning"
+	)
+end, { 
+	Icon = "shield-alert",
+	Keybind = {
+		Default = Enum.KeyCode.B,
+	}
+})
+
 movementTab:CreateLabel("ACTIONS")
 
 movementTab:CreateButton("Reset Character", function()
