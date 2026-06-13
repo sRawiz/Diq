@@ -33,17 +33,17 @@ local MyWindow = DiqUI:CreateWindow({
 -- ==========================================
 local movementTab = MyWindow:CreateTab("Movement", "move")
 
-movementTab:CreateLabel("FLY (CFRAME)")
+local flySection = movementTab:CreateSection("FLY (CFRAME)")
 
-local flyToggle = movementTab:CreateToggle("CFrame Fly", false, function(state)
+local flyToggle = flySection:CreateToggle("CFrame Fly", false, function(state)
 	Movement.SetFly(state)
 end, { Icon = "plane" })
 
-movementTab:CreateSlider("Fly Speed", 10, 500, 100, function(value)
+flySection:CreateSlider("Fly Speed", 10, 500, 100, function(value)
 	Movement.SetFlySpeed(value)
 end)
 
-movementTab:CreateKeybind("Toggle Fly", Enum.KeyCode.F, function()
+flySection:CreateKeybind("Toggle Fly", Enum.KeyCode.F, function()
 	local isFlying = Movement.ToggleFly()
 	flyToggle:Set(isFlying)
 	DiqUI:Notify(
@@ -54,17 +54,17 @@ movementTab:CreateKeybind("Toggle Fly", Enum.KeyCode.F, function()
 	)
 end)
 
-movementTab:CreateLabel("SPEED (CFRAME)")
+local speedSection = movementTab:CreateSection("SPEED (CFRAME)")
 
-local speedToggle = movementTab:CreateToggle("CFrame Speed", false, function(state)
+local speedToggle = speedSection:CreateToggle("CFrame Speed", false, function(state)
 	Movement.SetSpeed(state)
 end, { Icon = "zap" })
 
-movementTab:CreateSlider("Walk Speed", 10, 300, 60, function(value)
+speedSection:CreateSlider("Walk Speed", 10, 300, 60, function(value)
 	Movement.SetCFrameSpeed(value)
 end)
 
-movementTab:CreateKeybind("Toggle Speed", Enum.KeyCode.G, function()
+speedSection:CreateKeybind("Toggle Speed", Enum.KeyCode.G, function()
 	local isSpeed = Movement.ToggleSpeed()
 	speedToggle:Set(isSpeed)
 	DiqUI:Notify(
@@ -75,13 +75,13 @@ movementTab:CreateKeybind("Toggle Speed", Enum.KeyCode.G, function()
 	)
 end)
 
-movementTab:CreateLabel("NOCLIP")
+local noClipSection = movementTab:CreateSection("NOCLIP")
 
-local noClipToggle = movementTab:CreateToggle("NoClip", false, function(state)
+local noClipToggle = noClipSection:CreateToggle("NoClip", false, function(state)
 	Movement.SetNoClip(state)
 end, { Icon = "ghost" })
 
-movementTab:CreateKeybind("Toggle NoClip", Enum.KeyCode.V, function()
+noClipSection:CreateKeybind("Toggle NoClip", Enum.KeyCode.V, function()
 	local isNoClip = Movement.ToggleNoClip()
 	noClipToggle:Set(isNoClip)
 	DiqUI:Notify(
@@ -92,19 +92,19 @@ movementTab:CreateKeybind("Toggle NoClip", Enum.KeyCode.V, function()
 	)
 end)
 
-movementTab:CreateLabel("JUMP")
+local jumpSection = movementTab:CreateSection("JUMP")
 
-local infJumpToggle = movementTab:CreateToggle("Infinity Jump", false, function(state)
+local infJumpToggle = jumpSection:CreateToggle("Infinity Jump", false, function(state)
 	Movement.SetInfinityJump(state)
 end, { Icon = "chevron-up" })
 
-movementTab:CreateLabel("ACTIONS")
+local actionSection = movementTab:CreateSection("ACTIONS")
 
-movementTab:CreateButton("Reset Character", function()
+actionSection:CreateButton("Reset Character", function()
 	Movement.ResetCharacter()
 end, { Icon = "skull" })
 
-movementTab:CreateButton("Unanchor", function()
+actionSection:CreateButton("Unanchor", function()
 	Movement.Unanchor()
 	DiqUI:Notify("Success", "Character unanchored", 2, "success")
 end, { Icon = "shield" })
