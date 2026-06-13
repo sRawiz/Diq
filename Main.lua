@@ -24,11 +24,8 @@ local Misc     = loadstring(game:HttpGet(BASE_URL .. "MiscSystem.lua?_=" .. tost
 -- ⭐ โหลด Icon เข้า Library (ทำครั้งเดียว)
 DiqUI:LoadIcons(DiqIcons)
 
--- ==========================================
--- 🖥️ สร้าง Window
--- ==========================================
 local MyWindow = DiqUI:CreateWindow({
-	Title = "Diq Panel",
+	Title = "Diq",
 	ToggleKey = Enum.KeyCode.RightShift,
 })
 
@@ -254,17 +251,20 @@ end, { Icon = "sun" })
 -- ==========================================
 local settingsTab = MyWindow:CreateTab("Settings", "settings")
 
-settingsTab:CreateLabel("PLAYER")
+settingsTab:CreateLabel("PROFILE")
 
-settingsTab:CreateInput("Player Name", "Enter name...", function(text, enterPressed)
-	if enterPressed and text ~= "" then
-		DiqUI:Notify("Search", "Searching for: " .. text, 2, "info")
-	end
-end)
+-- Get Executor Name
+local executorName = "Unknown"
+if identifyexecutor then
+	executorName = identifyexecutor()
+end
 
-settingsTab:CreateDropdown("Teleport Mode", { "Instant", "Smooth", "CFrame" }, "Instant", function(selected)
-	DiqUI:Notify("Mode Changed", "Current Mode: " .. selected, 2, "info")
-end)
+-- สร้างการ์ดโปรไฟล์ที่มีรูป Avatar
+settingsTab:CreateProfileCard(
+	game.Players.LocalPlayer.Name, 
+	executorName, 
+	game.Players.LocalPlayer.UserId
+)
 
 settingsTab:CreateLabel("UTILITY")
 

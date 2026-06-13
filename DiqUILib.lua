@@ -646,6 +646,58 @@ function Diq:CreateWindow(config)
 		end
 
 		-- ======================================
+		-- 💳 CreateProfileCard — การ์ดโปรไฟล์มีรูป Avatar
+		-- ======================================
+		function Tab:CreateProfileCard(playerName, executorName, userId)
+			local obj = {}
+			local targetParent = (self and self._content) or content
+
+			local frame = Instance.new("Frame")
+			frame.Size = UDim2.new(1, 0, 0, 64)
+			frame.BackgroundColor3 = Theme.ElementBg
+			frame.Parent = targetParent
+			ApplyCorner(frame, 8)
+			ApplyStroke(frame, Theme.Outline)
+
+			-- รูป Avatar (วงกลม)
+			local avatar = Instance.new("ImageLabel")
+			avatar.Size = UDim2.new(0, 44, 0, 44)
+			avatar.Position = UDim2.new(0, 10, 0.5, -22)
+			avatar.BackgroundColor3 = Theme.HoverBg
+			avatar.Image = "rbxthumb://type=AvatarHeadShot&id=" .. tostring(userId) .. "&w=150&h=150"
+			avatar.Parent = frame
+			ApplyCorner(avatar, 22)
+
+			-- ชื่อผู้เล่น
+			local nameLbl = Instance.new("TextLabel")
+			nameLbl.Size = UDim2.new(1, -70, 0, 20)
+			nameLbl.Position = UDim2.new(0, 64, 0, 12)
+			nameLbl.BackgroundTransparency = 1
+			nameLbl.Text = playerName
+			nameLbl.TextColor3 = Theme.Text
+			nameLbl.Font = Enum.Font.GothamBold
+			nameLbl.TextSize = 14
+			nameLbl.TextXAlignment = Enum.TextXAlignment.Left
+			nameLbl.Parent = frame
+
+			-- ชื่อ Executor
+			local execLbl = Instance.new("TextLabel")
+			execLbl.Size = UDim2.new(1, -70, 0, 16)
+			execLbl.Position = UDim2.new(0, 64, 0, 34)
+			execLbl.BackgroundTransparency = 1
+			execLbl.Text = "Using: " .. (executorName or "Unknown")
+			execLbl.TextColor3 = Theme.Accent
+			execLbl.Font = Enum.Font.GothamMedium
+			execLbl.TextSize = 12
+			execLbl.TextXAlignment = Enum.TextXAlignment.Left
+			execLbl.Parent = frame
+
+			function obj:SetVisible(v) frame.Visible = v end
+			function obj:Destroy() frame:Destroy() end
+			return obj
+		end
+
+		-- ======================================
 		-- 📦 CreateSection — กล่องจัดกลุ่ม (Unified Container)
 		-- ======================================
 		function Tab:CreateSection(title)
