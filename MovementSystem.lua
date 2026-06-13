@@ -31,6 +31,7 @@ local State = {
 	IsFlying       = false,
 	IsCFrameSpeed  = false,
 	IsInfinityJump = false,
+	IsNoClip       = false,
 }
 
 local renderConnection = nil
@@ -148,6 +149,35 @@ function Movement.ToggleSpeed()
 	return State.IsCFrameSpeed
 end
 
+-- เปิด/ปิดทะลุกำแพง (NoClip)
+local noClipConnection = nil
+function Movement.SetNoClip(enable)
+	State.IsNoClip = enable
+	if enable and not noClipConnection then
+		noClipConnection = RunService.Stepped:Connect(function()
+			if State.IsNoClip then
+				local char = LocalPlayer.Character
+				if char then
+					for _, part in char:GetDescendants() do
+						if part:IsA("BasePart") and part.CanCollide then
+							part.CanCollide = false
+						end
+					end
+				end
+			end
+		end)
+	elseif not enable and noClipConnection then
+		noClipConnection:Disconnect()
+		noClipConnection = nil
+	end
+end
+
+-- สลับทะลุกำแพง (toggle)
+function Movement.ToggleNoClip()
+	Movement.SetNoClip(not State.IsNoClip)
+	return State.IsNoClip
+end
+
 -- ตั้งค่าความเร็วบิน (ใช้กับ Slider)
 function Movement.SetFlySpeed(speed)
 	CONFIG.FlySpeed = speed
@@ -209,7 +239,12 @@ end
 LocalPlayer.CharacterAdded:Connect(function()
 	State.IsFlying = false
 	State.IsCFrameSpeed = false
+	State.IsNoClip = false
 	UpdateRenderConnection()
+	if noClipConnection then
+		noClipConnection:Disconnect()
+		noClipConnection = nil
+	end
 end)
 
 return Movement

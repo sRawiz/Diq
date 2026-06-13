@@ -35,61 +35,76 @@ local movementTab = MyWindow:CreateTab("Movement", "move")
 
 movementTab:CreateLabel("FLY & SPEED")
 
-local flyToggle = movementTab:CreateToggle("โหมดบิน (CFrame Fly)", false, function(state)
+local flyToggle = movementTab:CreateToggle("CFrame Fly", false, function(state)
 	Movement.SetFly(state)
 end, { Icon = "plane" })
 
-local speedToggle = movementTab:CreateToggle("วิ่งเร็ว (CFrame Speed)", false, function(state)
+local speedToggle = movementTab:CreateToggle("CFrame Speed", false, function(state)
 	Movement.SetSpeed(state)
 end, { Icon = "zap" })
 
-local infJumpToggle = movementTab:CreateToggle("กระโดดไร้ขีดจำกัด (Infinity Jump)", false, function(state)
+local infJumpToggle = movementTab:CreateToggle("Infinity Jump", false, function(state)
 	Movement.SetInfinityJump(state)
 end, { Icon = "chevron-up" })
 
+local noClipToggle = movementTab:CreateToggle("NoClip", false, function(state)
+	Movement.SetNoClip(state)
+end, { Icon = "ghost" })
+
 movementTab:CreateLabel("KEYBINDS")
 
-movementTab:CreateKeybind("ปุ่มเปิด/ปิด บิน", Enum.KeyCode.F, function()
+movementTab:CreateKeybind("Toggle Fly Keybind", Enum.KeyCode.F, function()
 	local isFlying = Movement.ToggleFly()
 	flyToggle:Set(isFlying)
 	DiqUI:Notify(
-		isFlying and "เปิดโหมดบิน" or "ปิดโหมดบิน",
-		isFlying and "กดปุ่มเดิมเพื่อปิด" or "กลับสู่โหมดปกติ",
+		isFlying and "Fly Enabled" or "Fly Disabled",
+		isFlying and "Press key again to disable" or "Returned to normal mode",
 		2,
 		isFlying and "info" or "warning"
 	)
 end)
 
-movementTab:CreateKeybind("ปุ่มวิ่งเร็ว", Enum.KeyCode.G, function()
+movementTab:CreateKeybind("Toggle Speed Keybind", Enum.KeyCode.G, function()
 	local isSpeed = Movement.ToggleSpeed()
 	speedToggle:Set(isSpeed)
 	DiqUI:Notify(
-		isSpeed and "เปิดวิ่งเร็ว" or "ปิดวิ่งเร็ว",
-		isSpeed and "กดปุ่มเดิมเพื่อปิด" or "กลับความเร็วปกติ",
+		isSpeed and "Speed Enabled" or "Speed Disabled",
+		isSpeed and "Press key again to disable" or "Returned to normal speed",
 		2,
 		isSpeed and "info" or "warning"
 	)
 end)
 
+movementTab:CreateKeybind("Toggle NoClip Keybind", Enum.KeyCode.V, function()
+	local isNoClip = Movement.ToggleNoClip()
+	noClipToggle:Set(isNoClip)
+	DiqUI:Notify(
+		isNoClip and "NoClip Enabled" or "NoClip Disabled",
+		isNoClip and "You can walk through walls" or "Collision restored",
+		2,
+		isNoClip and "info" or "warning"
+	)
+end)
+
 movementTab:CreateLabel("SETTINGS")
 
-movementTab:CreateSlider("ความเร็วบิน", 10, 500, 100, function(value)
+movementTab:CreateSlider("Fly Speed", 10, 500, 100, function(value)
 	Movement.SetFlySpeed(value)
 end)
 
-movementTab:CreateSlider("ความเร็ววิ่ง", 10, 300, 60, function(value)
+movementTab:CreateSlider("Walk Speed", 10, 300, 60, function(value)
 	Movement.SetCFrameSpeed(value)
 end)
 
 movementTab:CreateLabel("ACTIONS")
 
-movementTab:CreateButton("รีเซ็ตตัวละคร", function()
+movementTab:CreateButton("Reset Character", function()
 	Movement.ResetCharacter()
 end, { Icon = "skull" })
 
-movementTab:CreateButton("ลบสถานะแช่แข็ง", function()
+movementTab:CreateButton("Unanchor", function()
 	Movement.Unanchor()
-	DiqUI:Notify("สำเร็จ", "ปลดล็อค Anchor เรียบร้อย", 2, "success")
+	DiqUI:Notify("Success", "Character unanchored", 2, "success")
 end, { Icon = "shield" })
 
 -- ==========================================
@@ -99,24 +114,24 @@ local settingsTab = MyWindow:CreateTab("Settings", "settings")
 
 settingsTab:CreateLabel("PLAYER")
 
-settingsTab:CreateInput("ชื่อผู้เล่น", "พิมพ์ชื่อ...", function(text, enterPressed)
+settingsTab:CreateInput("Player Name", "Enter name...", function(text, enterPressed)
 	if enterPressed and text ~= "" then
-		DiqUI:Notify("ค้นหา", "กำลังค้นหา: " .. text, 2, "info")
+		DiqUI:Notify("Search", "Searching for: " .. text, 2, "info")
 	end
 end)
 
-settingsTab:CreateDropdown("โหมดเทเลพอร์ต", { "Instant", "Smooth", "CFrame" }, "Instant", function(selected)
-	DiqUI:Notify("เปลี่ยนโหมด", "โหมด: " .. selected, 2, "info")
+settingsTab:CreateDropdown("Teleport Mode", { "Instant", "Smooth", "CFrame" }, "Instant", function(selected)
+	DiqUI:Notify("Mode Changed", "Current Mode: " .. selected, 2, "info")
 end)
 
 settingsTab:CreateLabel("ABOUT")
 
-settingsTab:CreateButton("เกี่ยวกับ Diq Panel", function()
+settingsTab:CreateButton("About Diq Panel", function()
 	DiqUI:Notify("Diq UI Library", "Version 2.1 — by sRawiz\nLucide Icons Edition", 3, "info")
 end, { Icon = "info" })
 
 -- ==========================================
 -- ✅ แจ้งเตือนว่าโหลดสำเร็จ
 -- ==========================================
-DiqUI:Notify("โหลดสำเร็จ!", "Diq Panel v2.1 พร้อมใช้งาน\nกด RightShift เพื่อซ่อน/แสดง", 4, "success")
+DiqUI:Notify("Loaded Successfully!", "Diq Panel v2.1 is ready\nPress RightShift to toggle UI", 4, "success")
 print("[Diq] Panel v2.1 Loaded Successfully!")
