@@ -82,6 +82,12 @@ local function CreateESP(player)
         healthBar.Filled = true
         healthBar.Transparency = 1
         cache.HealthBar = healthBar
+        
+        local hpText = Drawing.new("Text")
+        hpText.Size = 14
+        hpText.Center = true
+        hpText.Outline = true
+        cache.HpText = hpText
     end)
     
     ESP_Cache[player] = cache
@@ -96,6 +102,7 @@ local function RemoveESP(player)
         if cache.Tracer then cache.Tracer:Remove() end
         if cache.HealthBg then cache.HealthBg:Remove() end
         if cache.HealthBar then cache.HealthBar:Remove() end
+        if cache.HpText then cache.HpText:Remove() end
         ESP_Cache[player] = nil
     end
 end
@@ -142,11 +149,7 @@ local function UpdateESP()
                     cache.Name.Visible = Config.Names
                     if Config.Names then
                         local distance = math.floor((Camera.CFrame.Position - rootPart.Position).Magnitude)
-                        local hpText = ""
-                        if Config.Health then
-                            hpText = string.format(" [%d HP]", math.floor(humanoid.Health))
-                        end
-                        cache.Name.Text = string.format("%s [%dm]%s", player.Name, distance, hpText)
+                        cache.Name.Text = string.format("%s [%dm]", player.Name, distance)
                         cache.Name.Position = Vector2.new(rootPos.X, headPos.Y - 20)
                         cache.Name.Color = color
                     end
@@ -182,6 +185,16 @@ local function UpdateESP()
                             cache.HealthBar.Size = Vector2.new(barWidth, fillHeight)
                             cache.HealthBar.Position = Vector2.new(rootPos.X - width/2 - offset - barWidth, headPos.Y + (height - fillHeight))
                             cache.HealthBar.Color = healthColor
+                            
+                            -- HP Text
+                            if cache.HpText then
+                                cache.HpText.Visible = true
+                                cache.HpText.Text = string.format("[%d HP]", math.floor(humanoid.Health))
+                                cache.HpText.Position = Vector2.new(rootPos.X, legPos.Y + 2)
+                                cache.HpText.Color = healthColor
+                            end
+                        else
+                            if cache.HpText then cache.HpText.Visible = false end
                         end
                     end
                 else
@@ -190,6 +203,7 @@ local function UpdateESP()
                     cache.Tracer.Visible = false
                     if cache.HealthBg then cache.HealthBg.Visible = false end
                     if cache.HealthBar then cache.HealthBar.Visible = false end
+                    if cache.HpText then cache.HpText.Visible = false end
                 end
             end
         else
@@ -200,6 +214,7 @@ local function UpdateESP()
             if cache.Tracer then cache.Tracer.Visible = false end
             if cache.HealthBg then cache.HealthBg.Visible = false end
             if cache.HealthBar then cache.HealthBar.Visible = false end
+            if cache.HpText then cache.HpText.Visible = false end
         end
     end
 end
