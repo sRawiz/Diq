@@ -366,12 +366,15 @@ function Diq:CreateWindow(config)
 
 	MakeDraggable(TopBar, MainFrame, connections)
 
+	-- Icon ธีม Gemini (ประกายดาว)
+	AttachIcon("sparkles", TopBar, 18, Theme.Accent, UDim2.new(0, 15, 0.5, -9))
+
 	-- ชื่อหน้าต่าง
 	local TitleLabel = Instance.new("TextLabel")
 	TitleLabel.Size = UDim2.new(1, -110, 1, 0)
-	TitleLabel.Position = UDim2.new(0, 15, 0, 0)
+	TitleLabel.Position = UDim2.new(0, 42, 0, 0) -- เลื่อนหลบ Icon
 	TitleLabel.BackgroundTransparency = 1
-	TitleLabel.Text = "🎨 " .. windowTitle
+	TitleLabel.Text = windowTitle
 	TitleLabel.TextColor3 = Theme.Text
 	TitleLabel.Font = Enum.Font.GothamBold
 	TitleLabel.TextSize = 15
@@ -1602,7 +1605,7 @@ function Diq:CreateWindow(config)
 	end
 
 	function Window:SetTitle(newTitle)
-		TitleLabel.Text = "🎨 " .. newTitle
+		TitleLabel.Text = newTitle
 	end
 
 	function Window:Destroy()
