@@ -43,6 +43,10 @@ local speedToggle = movementTab:CreateToggle("วิ่งเร็ว (CFrame S
 	Movement.SetSpeed(state)
 end, { Icon = "zap" })
 
+local infJumpToggle = movementTab:CreateToggle("กระโดดไร้ขีดจำกัด (Infinity Jump)", false, function(state)
+	Movement.SetInfinityJump(state)
+end, { Icon = "chevron-up" })
+
 movementTab:CreateLabel("KEYBINDS")
 
 movementTab:CreateKeybind("ปุ่มเปิด/ปิด บิน", Enum.KeyCode.F, function()

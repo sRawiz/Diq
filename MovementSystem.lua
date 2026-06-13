@@ -30,6 +30,7 @@ local CONFIG = {
 local State = {
 	IsFlying       = false,
 	IsCFrameSpeed  = false,
+	IsInfinityJump = false,
 }
 
 local renderConnection = nil
@@ -155,6 +156,25 @@ end
 -- ตั้งค่าความเร็ววิ่ง (ใช้กับ Slider)
 function Movement.SetCFrameSpeed(speed)
 	CONFIG.CFrameSpeed = speed
+end
+
+-- เปิด/ปิด กระโดดไร้ขีดจำกัด (Infinity Jump)
+local jumpConnection = nil
+function Movement.SetInfinityJump(enable)
+	State.IsInfinityJump = enable
+	if enable and not jumpConnection then
+		jumpConnection = UserInputService.JumpRequest:Connect(function()
+			if State.IsInfinityJump then
+				local _, humanoid = getCharacterData()
+				if humanoid then
+					humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+				end
+			end
+		end)
+	elseif not enable and jumpConnection then
+		jumpConnection:Disconnect()
+		jumpConnection = nil
+	end
 end
 
 -- รีเซ็ตตัวละคร
