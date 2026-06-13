@@ -12,6 +12,7 @@ local Config = {
     Boxes = false,
     Names = false,
     Tracers = false,
+    Health = false,
     Highlights = true,
     UseTeamColor = true,
     Color = Color3.fromRGB(255, 0, 50),
@@ -68,6 +69,19 @@ local function CreateESP(player)
         local tracer = Drawing.new("Line")
         tracer.Thickness = 1
         cache.Tracer = tracer
+        
+        local healthBg = Drawing.new("Square")
+        healthBg.Thickness = 1
+        healthBg.Filled = true
+        healthBg.Transparency = 1
+        healthBg.Color = Color3.fromRGB(0, 0, 0)
+        cache.HealthBg = healthBg
+        
+        local healthBar = Drawing.new("Square")
+        healthBar.Thickness = 1
+        healthBar.Filled = true
+        healthBar.Transparency = 1
+        cache.HealthBar = healthBar
     end)
     
     ESP_Cache[player] = cache
@@ -80,6 +94,8 @@ local function RemoveESP(player)
         if cache.Box then cache.Box:Remove() end
         if cache.Name then cache.Name:Remove() end
         if cache.Tracer then cache.Tracer:Remove() end
+        if cache.HealthBg then cache.HealthBg:Remove() end
+        if cache.HealthBar then cache.HealthBar:Remove() end
         ESP_Cache[player] = nil
     end
 end
@@ -138,10 +154,38 @@ local function UpdateESP()
                         cache.Tracer.To = Vector2.new(rootPos.X, legPos.Y)
                         cache.Tracer.Color = color
                     end
+                    
+                    -- Health Bar
+                    if cache.HealthBg and cache.HealthBar then
+                        cache.HealthBg.Visible = Config.Health
+                        cache.HealthBar.Visible = Config.Health
+                        
+                        if Config.Health then
+                            local healthPct = math.clamp(humanoid.Health / humanoid.MaxHealth, 0, 1)
+                            
+                            -- สีเลือด (เขียว -> เหลือง -> แดง)
+                            local healthColor = Color3.fromRGB(255, 0, 0):Lerp(Color3.fromRGB(0, 255, 0), healthPct)
+                            
+                            local barWidth = 3
+                            local offset = 5
+                            
+                            -- Background
+                            cache.HealthBg.Size = Vector2.new(barWidth, height)
+                            cache.HealthBg.Position = Vector2.new(rootPos.X - width/2 - offset - barWidth, headPos.Y)
+                            
+                            -- Fill
+                            local fillHeight = height * healthPct
+                            cache.HealthBar.Size = Vector2.new(barWidth, fillHeight)
+                            cache.HealthBar.Position = Vector2.new(rootPos.X - width/2 - offset - barWidth, headPos.Y + (height - fillHeight))
+                            cache.HealthBar.Color = healthColor
+                        end
+                    end
                 else
                     cache.Box.Visible = false
                     cache.Name.Visible = false
                     cache.Tracer.Visible = false
+                    if cache.HealthBg then cache.HealthBg.Visible = false end
+                    if cache.HealthBar then cache.HealthBar.Visible = false end
                 end
             end
         else
@@ -150,6 +194,8 @@ local function UpdateESP()
             if cache.Box then cache.Box.Visible = false end
             if cache.Name then cache.Name.Visible = false end
             if cache.Tracer then cache.Tracer.Visible = false end
+            if cache.HealthBg then cache.HealthBg.Visible = false end
+            if cache.HealthBar then cache.HealthBar.Visible = false end
         end
     end
 end
@@ -177,6 +223,7 @@ function ESPSystem.SetHighlights(state) Config.Highlights = state end
 function ESPSystem.SetBoxes(state) Config.Boxes = state end
 function ESPSystem.SetNames(state) Config.Names = state end
 function ESPSystem.SetTracers(state) Config.Tracers = state end
+function ESPSystem.SetHealth(state) Config.Health = state end
 function ESPSystem.SetUseTeamColor(state) Config.UseTeamColor = state end
 
 return ESPSystem

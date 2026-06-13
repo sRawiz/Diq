@@ -150,6 +150,10 @@ visualTab:CreateToggle("Show Boxes", false, function(state)
 	ESP.SetBoxes(state)
 end, { Icon = "square" })
 
+visualTab:CreateToggle("Show Health Bar", false, function(state)
+	ESP.SetHealth(state)
+end, { Icon = "activity" })
+
 visualTab:CreateToggle("Show Names & Distance", false, function(state)
 	ESP.SetNames(state)
 end, { Icon = "type" })
