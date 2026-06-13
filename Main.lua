@@ -16,6 +16,7 @@ local BASE_URL = "https://raw.githubusercontent.com/" .. GITHUB_USERNAME .. "/" 
 local DiqUI    = loadstring(game:HttpGet(BASE_URL .. "DiqUILib.lua?_=" .. tostring(tick())))()
 local DiqIcons = loadstring(game:HttpGet(BASE_URL .. "DiqIcons.lua?_=" .. tostring(tick())))()
 local Movement = loadstring(game:HttpGet(BASE_URL .. "MovementSystem.lua?_=" .. tostring(tick())))()
+local ESP      = loadstring(game:HttpGet(BASE_URL .. "ESPSystem.lua?_=" .. tostring(tick())))()
 
 -- ⭐ โหลด Icon เข้า Library (ทำครั้งเดียว)
 DiqUI:LoadIcons(DiqIcons)
@@ -127,6 +128,41 @@ movementTab:CreateButton("Unanchor", function()
 	Movement.Unanchor()
 	DiqUI:Notify("Success", "Character unanchored", 2, "success")
 end, { Icon = "shield" })
+
+-- ==========================================
+-- 👁️ Tab: Visuals (ใช้ Lucide icon "eye")
+-- ==========================================
+local visualTab = MyWindow:CreateTab("Visuals", "eye")
+
+visualTab:CreateLabel("ESP MASTER")
+
+visualTab:CreateToggle("Enable ESP", false, function(state)
+	ESP.SetEnabled(state)
+end, { Icon = "eye" })
+
+visualTab:CreateLabel("ESP ELEMENTS")
+
+visualTab:CreateToggle("Show Highlights", true, function(state)
+	ESP.SetHighlights(state)
+end, { Icon = "sun" })
+
+visualTab:CreateToggle("Show Boxes", false, function(state)
+	ESP.SetBoxes(state)
+end, { Icon = "square" })
+
+visualTab:CreateToggle("Show Names & Distance", false, function(state)
+	ESP.SetNames(state)
+end, { Icon = "type" })
+
+visualTab:CreateToggle("Show Tracers", false, function(state)
+	ESP.SetTracers(state)
+end, { Icon = "git-commit" })
+
+visualTab:CreateLabel("ESP SETTINGS")
+
+visualTab:CreateToggle("Use Team Color", true, function(state)
+	ESP.SetUseTeamColor(state)
+end, { Icon = "users" })
 
 -- ==========================================
 -- ⚙️ Tab: Settings (ใช้ Lucide icon "settings")
