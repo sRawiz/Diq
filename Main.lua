@@ -1,44 +1,103 @@
 -- ==========================================
--- 🎮 Loader / Main Controller
+-- 🎮 Loader / Main Controller v2.0
 -- ==========================================
--- สคริปต์นี้เอาไว้ไปรันใน Executor (แค่บรรทัดเดียว)
--- จะดึง Library และ System จาก GitHub ของคุณ
+-- อัพเดท: ใช้ API ใหม่ของ Diq UI Library v2.0
+-- ✅ Tab System (Movement / Settings)
+-- ✅ Slider ปรับค่าความเร็ว
+-- ✅ Keybind ตั้งค่าปุ่มลัด
+-- ✅ Dropdown, Input
+-- ✅ Notification
 
--- ⚠️ ก่อนใช้งานจริง: ให้เปลี่ยน 2 จุดด้านล่างนี้ให้ตรงกับ GitHub ของคุณ ⚠️
-local GITHUB_USERNAME = "sRawiz" -- เปลี่ยนตรงนี้
-local REPO_NAME = "Diq"             -- เปลี่ยนตรงนี้
+-- ⚠️ เปลี่ยนให้ตรงกับ GitHub ของคุณ ⚠️
+local GITHUB_USERNAME = "sRawiz"
+local REPO_NAME = "Diq"
 
--- สร้าง URL สำหรับดึงไฟล์แบบสดๆ
 local BASE_URL = "https://raw.githubusercontent.com/" .. GITHUB_USERNAME .. "/" .. REPO_NAME .. "/main/"
 
--- โหลด Module ย่อยต่างๆ ผ่านอินเทอร์เน็ต
+-- โหลด Module ผ่านอินเทอร์เน็ต
 local DiqUI = loadstring(game:HttpGet(BASE_URL .. "DiqUILib.lua"))()
 local Movement = loadstring(game:HttpGet(BASE_URL .. "MovementSystem.lua"))()
 
 -- ==========================================
--- 🖥️ สร้าง UI และผูกฟังก์ชัน
+-- 🖥️ สร้าง Window
 -- ==========================================
+local MyWindow = DiqUI:CreateWindow({
+	Title = "Diq Panel",
+	ToggleKey = Enum.KeyCode.RightShift,  -- กด RightShift เพื่อซ่อน/แสดง
+})
 
-local MyWindow = DiqUI:CreateWindow("Diq Panel")
+-- ==========================================
+-- 🏃 Tab: Movement
+-- ==========================================
+local movementTab = MyWindow:CreateTab("Movement", "🏃")
 
-MyWindow:CreateLabel("MOVEMENT SETTINGS")
+movementTab:CreateLabel("FLY & SPEED")
 
-MyWindow:CreateToggle("✈️ โหมดบิน (CFrame Fly)", false, function(state)
-    Movement.SetFly(state)
+local flyToggle = movementTab:CreateToggle("✈️ โหมดบิน (CFrame Fly)", false, function(state)
+	Movement.SetFly(state)
 end)
 
-MyWindow:CreateToggle("⚡ วิ่งเร็ว (CFrame Speed)", false, function(state)
-    Movement.SetSpeed(state)
+local speedToggle = movementTab:CreateToggle("⚡ วิ่งเร็ว (CFrame Speed)", false, function(state)
+	Movement.SetSpeed(state)
 end)
 
-MyWindow:CreateLabel("ACTIONS")
-
-MyWindow:CreateButton("💀 รีเซ็ตตัวละคร (Reset)", function()
-    Movement.ResetCharacter()
+movementTab:CreateSlider("🚀 ความเร็วบิน", 10, 500, 100, function(value)
+	Movement.SetFlySpeed(value)
 end)
 
-MyWindow:CreateButton("🛡️ ลบสถานะแช่แข็ง (Unanchor)", function()
-    Movement.Unanchor()
+movementTab:CreateSlider("💨 ความเร็ววิ่ง", 10, 300, 60, function(value)
+	Movement.SetCFrameSpeed(value)
 end)
 
-print("✅ Diq Panel Loaded Successfully from GitHub!")
+movementTab:CreateLabel("ACTIONS")
+
+movementTab:CreateButton("💀 รีเซ็ตตัวละคร", function()
+	Movement.ResetCharacter()
+end)
+
+movementTab:CreateButton("🛡️ ลบสถานะแช่แข็ง", function()
+	Movement.Unanchor()
+	DiqUI:Notify("✅ สำเร็จ", "ปลดล็อค Anchor เรียบร้อย", 2, "success")
+end)
+
+-- ==========================================
+-- ⚙️ Tab: Settings
+-- ==========================================
+local settingsTab = MyWindow:CreateTab("Settings", "⚙️")
+
+settingsTab:CreateLabel("KEYBINDS")
+
+settingsTab:CreateKeybind("🎮 สลับโหมดบิน", Enum.KeyCode.F, function()
+	local isFlying = Movement.ToggleFly()
+	flyToggle:Set(isFlying)
+	DiqUI:Notify(
+		isFlying and "✈️ เปิดโหมดบิน" or "🚶 ปิดโหมดบิน",
+		isFlying and "กดปุ่มเดิมเพื่อปิด" or "กลับสู่โหมดปกติ",
+		2,
+		isFlying and "info" or "warning"
+	)
+end)
+
+settingsTab:CreateLabel("PLAYER")
+
+settingsTab:CreateInput("📝 ชื่อผู้เล่น", "พิมพ์ชื่อ...", function(text, enterPressed)
+	if enterPressed and text ~= "" then
+		DiqUI:Notify("🔍 ค้นหา", "กำลังค้นหา: " .. text, 2, "info")
+	end
+end)
+
+settingsTab:CreateDropdown("🎯 โหมดเทเลพอร์ต", { "Instant", "Smooth", "CFrame" }, "Instant", function(selected)
+	DiqUI:Notify("🎯 เปลี่ยนโหมด", "โหมด: " .. selected, 2, "info")
+end)
+
+settingsTab:CreateLabel("ABOUT")
+
+settingsTab:CreateButton("ℹ️ เกี่ยวกับ Diq Panel", function()
+	DiqUI:Notify("🎨 Diq UI Library", "Version 2.0 — by sRawiz", 3, "info")
+end)
+
+-- ==========================================
+-- ✅ แจ้งเตือนว่าโหลดสำเร็จ
+-- ==========================================
+DiqUI:Notify("✅ โหลดสำเร็จ!", "Diq Panel v2.0 พร้อมใช้งาน\nกด RightShift เพื่อซ่อน/แสดง", 4, "success")
+print("✅ Diq Panel v2.0 Loaded Successfully!")

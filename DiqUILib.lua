@@ -1,6 +1,17 @@
 -- ==========================================
--- 🎨 Module: Diq UI Library
+-- 🎨 Diq UI Library v2.0
 -- ==========================================
+-- เขียนใหม่ทั้งหมดพร้อม:
+-- ✅ แก้ Memory Leak ทุกจุด (Connection Tracker)
+-- ✅ Tab System (Sidebar)
+-- ✅ ทุก element return object ควบคุมได้
+-- ✅ Components ใหม่: Slider, Dropdown, Input, Keybind
+-- ✅ Notification System
+-- ✅ Minimize / Close / Toggle Keybind
+-- ✅ Open/Close Animation
+-- ✅ Theme Customization API
+-- ✅ Debounce ทุกปุ่ม
+-- ✅ Window:Destroy() cleanup
 
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
@@ -9,226 +20,1203 @@ local CoreGui = game:GetService("CoreGui")
 
 local Diq = {}
 
-local Theme = {
-    Background = Color3.fromRGB(24, 24, 27),
-    ElementBg = Color3.fromRGB(39, 39, 42),
-    HoverBg = Color3.fromRGB(63, 63, 70),
-    Accent = Color3.fromRGB(99, 102, 241),
-    Text = Color3.fromRGB(250, 250, 250),
-    SubText = Color3.fromRGB(161, 161, 170),
-    Outline = Color3.fromRGB(63, 63, 70),
+-- ==========================================
+-- 🎨 Default Theme (Zinc / Indigo)
+-- ==========================================
+local DefaultTheme = {
+	Background  = Color3.fromRGB(18, 18, 22),
+	Sidebar     = Color3.fromRGB(24, 24, 30),
+	ElementBg   = Color3.fromRGB(35, 35, 42),
+	HoverBg     = Color3.fromRGB(50, 50, 60),
+	ActiveTab   = Color3.fromRGB(42, 42, 52),
+	Accent      = Color3.fromRGB(99, 102, 241),
+	AccentHover = Color3.fromRGB(120, 123, 255),
+	Text        = Color3.fromRGB(245, 245, 250),
+	SubText     = Color3.fromRGB(140, 140, 160),
+	DimText     = Color3.fromRGB(100, 100, 120),
+	Outline     = Color3.fromRGB(50, 50, 60),
+	SliderBg    = Color3.fromRGB(40, 40, 50),
+	InputBg     = Color3.fromRGB(28, 28, 35),
+	NotifyBg    = Color3.fromRGB(30, 30, 38),
+	Success     = Color3.fromRGB(34, 197, 94),
+	Warning     = Color3.fromRGB(250, 204, 21),
+	Error       = Color3.fromRGB(239, 68, 68),
 }
 
-local function MakeDraggable(dragPart, mainFrame)
-    local dragging, dragInput, dragStart, startPos
-    dragPart.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = true
-            dragStart = input.Position
-            startPos = mainFrame.Position
-            input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then dragging = false end
-            end)
-        end
-    end)
-    dragPart.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement then dragInput = input end
-    end)
-    UserInputService.InputChanged:Connect(function(input)
-        if input == dragInput and dragging then
-            local delta = input.Position - dragStart
-            mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-        end
-    end)
+local Theme = table.clone(DefaultTheme)
+
+-- เปลี่ยนธีมสีทั้งระบบ
+function Diq:SetTheme(newTheme)
+	for key, value in newTheme do
+		if DefaultTheme[key] ~= nil then
+			Theme[key] = value
+		end
+	end
 end
 
-function Diq:CreateWindow(titleText)
-    local Window = {}
-    
-    for _, v in pairs(Players.LocalPlayer.PlayerGui:GetChildren()) do
-        if v.Name == "Diq_UI" then v:Destroy() end
-    end
-    pcall(function()
-        for _, v in pairs(CoreGui:GetChildren()) do
-            if v.Name == "Diq_UI" then v:Destroy() end
-        end
-    end)
+-- ==========================================
+-- 🔧 Utility Functions
+-- ==========================================
 
-    local ScreenGui = Instance.new("ScreenGui")
-    ScreenGui.Name = "Diq_UI"
-    ScreenGui.ResetOnSpawn = false
-    if not pcall(function() ScreenGui.Parent = CoreGui end) then
-        ScreenGui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
-    end
+-- ระบบจัดการ Connection ป้องกัน Memory Leak
+local function CreateConnectionTracker()
+	local tracker = { _list = {} }
 
-    local MainFrame = Instance.new("Frame")
-    MainFrame.Size = UDim2.new(0, 380, 0, 420)
-    MainFrame.Position = UDim2.new(0.5, -190, 0.5, -210)
-    MainFrame.BackgroundColor3 = Theme.Background
-    MainFrame.BorderSizePixel = 0
-    MainFrame.ClipsDescendants = true
-    MainFrame.Parent = ScreenGui
+	function tracker:Track(connection)
+		table.insert(self._list, connection)
+		return connection
+	end
 
-    Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 10)
-    local UIStroke = Instance.new("UIStroke", MainFrame)
-    UIStroke.Color = Theme.Outline
-    UIStroke.Thickness = 1
+	function tracker:DisconnectAll()
+		for _, conn in self._list do
+			if typeof(conn) == "RBXScriptConnection" and conn.Connected then
+				conn:Disconnect()
+			end
+		end
+		table.clear(self._list)
+	end
 
-    local TopBar = Instance.new("Frame")
-    TopBar.Size = UDim2.new(1, 0, 0, 45)
-    TopBar.BackgroundTransparency = 1
-    TopBar.Parent = MainFrame
+	return tracker
+end
 
-    local Title = Instance.new("TextLabel")
-    Title.Size = UDim2.new(1, -30, 1, 0)
-    Title.Position = UDim2.new(0, 15, 0, 0)
-    Title.BackgroundTransparency = 1
-    Title.Text = titleText or "Diq Panel"
-    Title.TextColor3 = Theme.Text
-    Title.Font = Enum.Font.GothamBold
-    Title.TextSize = 16
-    Title.TextXAlignment = Enum.TextXAlignment.Left
-    Title.Parent = TopBar
+-- Tween Helper
+local function Tween(obj, duration, props, style, dir)
+	local tween = TweenService:Create(
+		obj,
+		TweenInfo.new(duration, style or Enum.EasingStyle.Quint, dir or Enum.EasingDirection.Out),
+		props
+	)
+	tween:Play()
+	return tween
+end
 
-    MakeDraggable(TopBar, MainFrame)
+-- สร้าง UICorner
+local function ApplyCorner(obj, radius)
+	local c = Instance.new("UICorner")
+	c.CornerRadius = UDim.new(0, radius or 6)
+	c.Parent = obj
+	return c
+end
 
-    local Divider = Instance.new("Frame")
-    Divider.Size = UDim2.new(1, 0, 0, 1)
-    Divider.Position = UDim2.new(0, 0, 1, 0)
-    Divider.BackgroundColor3 = Theme.Outline
-    Divider.BorderSizePixel = 0
-    Divider.Parent = TopBar
+-- สร้าง UIStroke
+local function ApplyStroke(obj, color, thickness)
+	local s = Instance.new("UIStroke")
+	s.Color = color or Theme.Outline
+	s.Thickness = thickness or 1
+	s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	s.Parent = obj
+	return s
+end
 
-    local Container = Instance.new("ScrollingFrame")
-    Container.Size = UDim2.new(1, -20, 1, -60)
-    Container.Position = UDim2.new(0, 10, 0, 55)
-    Container.BackgroundTransparency = 1
-    Container.ScrollBarThickness = 3
-    Container.ScrollBarImageColor3 = Theme.Outline
-    Container.BorderSizePixel = 0
-    Container.Parent = MainFrame
+-- สร้าง UIPadding
+local function ApplyPadding(obj, top, bottom, left, right)
+	local p = Instance.new("UIPadding")
+	p.PaddingTop = UDim.new(0, top or 0)
+	p.PaddingBottom = UDim.new(0, bottom or 0)
+	p.PaddingLeft = UDim.new(0, left or 0)
+	p.PaddingRight = UDim.new(0, right or 0)
+	p.Parent = obj
+	return p
+end
 
-    local UIListLayout = Instance.new("UIListLayout")
-    UIListLayout.Padding = UDim.new(0, 10)
-    UIListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-    UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    UIListLayout.Parent = Container
+-- ลากหน้าต่างได้ (แก้ leak: ทุก connection ถูก track)
+local function MakeDraggable(dragPart, mainFrame, tracker)
+	local dragging = false
+	local dragStart, startPos
 
-    local UIPadding = Instance.new("UIPadding")
-    UIPadding.PaddingTop = UDim.new(0, 5)
-    UIPadding.PaddingBottom = UDim.new(0, 5)
-    UIPadding.Parent = Container
+	tracker:Track(dragPart.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1
+			or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = true
+			dragStart = input.Position
+			startPos = mainFrame.Position
+		end
+	end))
 
-    UIListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-        Container.CanvasSize = UDim2.new(0, 0, 0, UIListLayout.AbsoluteContentSize.Y + 15)
-    end)
+	tracker:Track(dragPart.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1
+			or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = false
+		end
+	end))
 
-    function Window:CreateLabel(text)
-        local LabelFrame = Instance.new("Frame")
-        LabelFrame.Size = UDim2.new(1, -10, 0, 20)
-        LabelFrame.BackgroundTransparency = 1
-        LabelFrame.Parent = Container
+	tracker:Track(UserInputService.InputChanged:Connect(function(input)
+		if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement
+			or input.UserInputType == Enum.UserInputType.Touch) then
+			local delta = input.Position - dragStart
+			mainFrame.Position = UDim2.new(
+				startPos.X.Scale, startPos.X.Offset + delta.X,
+				startPos.Y.Scale, startPos.Y.Offset + delta.Y
+			)
+		end
+	end))
+end
 
-        local LabelText = Instance.new("TextLabel")
-        LabelText.Size = UDim2.new(1, 0, 1, 0)
-        LabelText.BackgroundTransparency = 1
-        LabelText.Text = text
-        LabelText.TextColor3 = Theme.SubText
-        LabelText.Font = Enum.Font.Gotham
-        LabelText.TextSize = 13
-        LabelText.TextXAlignment = Enum.TextXAlignment.Left
-        LabelText.Parent = LabelFrame
-    end
+-- ==========================================
+-- 🔔 Notification System
+-- ==========================================
+local NotificationHolder = nil
 
-    function Window:CreateButton(text, callback)
-        local ButtonFrame = Instance.new("Frame")
-        ButtonFrame.Size = UDim2.new(1, -10, 0, 42)
-        ButtonFrame.BackgroundColor3 = Theme.ElementBg
-        ButtonFrame.Parent = Container
-        Instance.new("UICorner", ButtonFrame).CornerRadius = UDim.new(0, 6)
-        
-        local ButtonStroke = Instance.new("UIStroke", ButtonFrame)
-        ButtonStroke.Color = Theme.Outline
-        ButtonStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+local function EnsureNotificationHolder(screenGui)
+	if NotificationHolder and NotificationHolder.Parent then return end
 
-        local Btn = Instance.new("TextButton")
-        Btn.Size = UDim2.new(1, 0, 1, 0)
-        Btn.BackgroundTransparency = 1
-        Btn.Text = text
-        Btn.TextColor3 = Theme.Text
-        Btn.Font = Enum.Font.GothamMedium
-        Btn.TextSize = 14
-        Btn.Parent = ButtonFrame
+	NotificationHolder = Instance.new("Frame")
+	NotificationHolder.Name = "DiqNotifications"
+	NotificationHolder.Size = UDim2.new(0, 280, 1, -20)
+	NotificationHolder.Position = UDim2.new(1, -290, 0, 10)
+	NotificationHolder.BackgroundTransparency = 1
+	NotificationHolder.Parent = screenGui
 
-        Btn.MouseEnter:Connect(function()
-            TweenService:Create(ButtonFrame, TweenInfo.new(0.2), {BackgroundColor3 = Theme.HoverBg}):Play()
-            TweenService:Create(ButtonStroke, TweenInfo.new(0.2), {Color = Theme.Accent}):Play()
-        end)
-        
-        Btn.MouseLeave:Connect(function()
-            TweenService:Create(ButtonFrame, TweenInfo.new(0.2), {BackgroundColor3 = Theme.ElementBg}):Play()
-            TweenService:Create(ButtonStroke, TweenInfo.new(0.2), {Color = Theme.Outline}):Play()
-        end)
+	local layout = Instance.new("UIListLayout")
+	layout.Padding = UDim.new(0, 8)
+	layout.VerticalAlignment = Enum.VerticalAlignment.Bottom
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	layout.Parent = NotificationHolder
+end
 
-        Btn.MouseButton1Click:Connect(function()
-            local tw = TweenService:Create(ButtonFrame, TweenInfo.new(0.1), {Size = UDim2.new(0.95, -10, 0, 38)})
-            tw:Play()
-            tw.Completed:Wait()
-            TweenService:Create(ButtonFrame, TweenInfo.new(0.1), {Size = UDim2.new(1, -10, 0, 42)}):Play()
-            if callback then callback() end
-        end)
-    end
+-- แสดงการแจ้งเตือน
+-- notifType: "info" | "success" | "warning" | "error"
+function Diq:Notify(title, message, duration, notifType)
+	if not NotificationHolder or not NotificationHolder.Parent then return end
 
-    function Window:CreateToggle(text, default, callback)
-        local toggled = default or false
+	duration = duration or 3
+	notifType = notifType or "info"
 
-        local ToggleFrame = Instance.new("Frame")
-        ToggleFrame.Size = UDim2.new(1, -10, 0, 42)
-        ToggleFrame.BackgroundColor3 = Theme.ElementBg
-        ToggleFrame.Parent = Container
-        Instance.new("UICorner", ToggleFrame).CornerRadius = UDim.new(0, 6)
-        Instance.new("UIStroke", ToggleFrame).Color = Theme.Outline
+	local accentColor = Theme.Accent
+	if notifType == "success" then accentColor = Theme.Success
+	elseif notifType == "warning" then accentColor = Theme.Warning
+	elseif notifType == "error" then accentColor = Theme.Error end
 
-        local Label = Instance.new("TextLabel")
-        Label.Size = UDim2.new(1, -70, 1, 0)
-        Label.Position = UDim2.new(0, 15, 0, 0)
-        Label.BackgroundTransparency = 1
-        Label.Text = text
-        Label.TextColor3 = Theme.Text
-        Label.Font = Enum.Font.GothamMedium
-        Label.TextSize = 14
-        Label.TextXAlignment = Enum.TextXAlignment.Left
-        Label.Parent = ToggleFrame
+	-- Notification frame
+	local notif = Instance.new("Frame")
+	notif.Size = UDim2.new(1, 0, 0, 68)
+	notif.BackgroundColor3 = Theme.NotifyBg
+	notif.BackgroundTransparency = 1
+	notif.ClipsDescendants = true
+	notif.Parent = NotificationHolder
+	ApplyCorner(notif, 8)
+	ApplyStroke(notif, Theme.Outline)
 
-        local SwitchBg = Instance.new("Frame")
-        SwitchBg.Size = UDim2.new(0, 42, 0, 22)
-        SwitchBg.Position = UDim2.new(1, -55, 0.5, -11)
-        SwitchBg.BackgroundColor3 = toggled and Theme.Accent or Theme.Background
-        SwitchBg.Parent = ToggleFrame
-        Instance.new("UICorner", SwitchBg).CornerRadius = UDim.new(1, 0)
+	-- แถบสีด้านซ้าย
+	local bar = Instance.new("Frame")
+	bar.Size = UDim2.new(0, 3, 1, -10)
+	bar.Position = UDim2.new(0, 6, 0, 5)
+	bar.BackgroundColor3 = accentColor
+	bar.BorderSizePixel = 0
+	bar.Parent = notif
+	ApplyCorner(bar, 2)
 
-        local SwitchKnob = Instance.new("Frame")
-        SwitchKnob.Size = UDim2.new(0, 16, 0, 16)
-        SwitchKnob.Position = UDim2.new(0, toggled and 23 or 3, 0.5, -8)
-        SwitchKnob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-        SwitchKnob.Parent = SwitchBg
-        Instance.new("UICorner", SwitchKnob).CornerRadius = UDim.new(1, 0)
+	-- หัวข้อ
+	local titleLbl = Instance.new("TextLabel")
+	titleLbl.Size = UDim2.new(1, -25, 0, 20)
+	titleLbl.Position = UDim2.new(0, 18, 0, 8)
+	titleLbl.BackgroundTransparency = 1
+	titleLbl.Text = title or "Notification"
+	titleLbl.TextColor3 = Theme.Text
+	titleLbl.Font = Enum.Font.GothamBold
+	titleLbl.TextSize = 13
+	titleLbl.TextXAlignment = Enum.TextXAlignment.Left
+	titleLbl.Parent = notif
 
-        local Btn = Instance.new("TextButton")
-        Btn.Size = UDim2.new(1, 0, 1, 0)
-        Btn.BackgroundTransparency = 1
-        Btn.Text = ""
-        Btn.Parent = ToggleFrame
+	-- เนื้อหา
+	local msgLbl = Instance.new("TextLabel")
+	msgLbl.Size = UDim2.new(1, -25, 0, 30)
+	msgLbl.Position = UDim2.new(0, 18, 0, 30)
+	msgLbl.BackgroundTransparency = 1
+	msgLbl.Text = message or ""
+	msgLbl.TextColor3 = Theme.SubText
+	msgLbl.Font = Enum.Font.Gotham
+	msgLbl.TextSize = 12
+	msgLbl.TextXAlignment = Enum.TextXAlignment.Left
+	msgLbl.TextYAlignment = Enum.TextYAlignment.Top
+	msgLbl.TextWrapped = true
+	msgLbl.Parent = notif
 
-        Btn.MouseButton1Click:Connect(function()
-            toggled = not toggled
-            TweenService:Create(SwitchBg, TweenInfo.new(0.25, Enum.EasingStyle.Quint), {BackgroundColor3 = toggled and Theme.Accent or Theme.Background}):Play()
-            TweenService:Create(SwitchKnob, TweenInfo.new(0.25, Enum.EasingStyle.Quint), {Position = UDim2.new(0, toggled and 23 or 3, 0.5, -8)}):Play()
-            if callback then callback(toggled) end
-        end)
-    end
+	-- Slide in
+	Tween(notif, 0.35, { BackgroundTransparency = 0 })
 
-    return Window
+	-- หายไปอัตโนมัติ
+	task.delay(duration, function()
+		if notif and notif.Parent then
+			local tw = Tween(notif, 0.3, {
+				BackgroundTransparency = 1,
+				Size = UDim2.new(1, 0, 0, 0),
+			})
+			tw.Completed:Once(function()
+				if notif then notif:Destroy() end
+			end)
+		end
+	end)
+end
+
+-- ==========================================
+-- 🖥️ Window System
+-- ==========================================
+
+-- เก็บ tracker ระดับ module เพื่อ cleanup ตอนสร้าง window ใหม่
+local _activeTracker = nil
+
+function Diq:CreateWindow(config)
+	-- รองรับทั้ง string และ table
+	if type(config) == "string" then
+		config = { Title = config }
+	end
+	config = config or {}
+
+	local windowTitle = config.Title or "Diq Panel"
+	local windowSize  = config.Size or UDim2.new(0, 520, 0, 380)
+	local toggleKey   = config.ToggleKey or Enum.KeyCode.RightShift
+
+	local Window = {}
+	
+	-- Cleanup tracker เก่า (ป้องกัน leak จาก window เก่า)
+	if _activeTracker then
+		_activeTracker:DisconnectAll()
+		_activeTracker = nil
+	end
+	
+	local connections = CreateConnectionTracker()
+	_activeTracker = connections
+	
+	local tabs = {}
+	local activeTab = nil
+	local isVisible = true
+	local isMinimized = false
+
+	-- ==========================================
+	-- ลบ UI เก่าที่ค้างอยู่
+	-- ==========================================
+	for _, v in Players.LocalPlayer.PlayerGui:GetChildren() do
+		if v.Name == "Diq_UI" then v:Destroy() end
+	end
+	pcall(function()
+		for _, v in CoreGui:GetChildren() do
+			if v.Name == "Diq_UI" then v:Destroy() end
+		end
+	end)
+
+	-- ==========================================
+	-- ScreenGui
+	-- ==========================================
+	local ScreenGui = Instance.new("ScreenGui")
+	ScreenGui.Name = "Diq_UI"
+	ScreenGui.ResetOnSpawn = false
+	ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	if not pcall(function() ScreenGui.Parent = CoreGui end) then
+		ScreenGui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
+	end
+
+	EnsureNotificationHolder(ScreenGui)
+
+	-- ==========================================
+	-- Main Frame (เริ่มเล็ก → ขยายด้วย animation)
+	-- ==========================================
+	local MainFrame = Instance.new("Frame")
+	MainFrame.Name = "DiqMainFrame"
+	MainFrame.Size = UDim2.new(0, 0, 0, 0)
+	MainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
+	MainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+	MainFrame.BackgroundColor3 = Theme.Background
+	MainFrame.BorderSizePixel = 0
+	MainFrame.ClipsDescendants = true
+	MainFrame.Parent = ScreenGui
+	ApplyCorner(MainFrame, 10)
+	ApplyStroke(MainFrame, Theme.Outline, 1)
+
+	-- 🎬 Open animation
+	Tween(MainFrame, 0.45, { Size = windowSize }, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+
+	-- ==========================================
+	-- 🔝 Top Bar
+	-- ==========================================
+	local TopBar = Instance.new("Frame")
+	TopBar.Name = "TopBar"
+	TopBar.Size = UDim2.new(1, 0, 0, 40)
+	TopBar.BackgroundColor3 = Theme.Sidebar
+	TopBar.BorderSizePixel = 0
+	TopBar.Parent = MainFrame
+
+	-- ปิดมุมล่างของ TopBar (ให้เป็นเหลี่ยม)
+	local topBarCover = Instance.new("Frame")
+	topBarCover.Size = UDim2.new(1, 0, 0, 12)
+	topBarCover.Position = UDim2.new(0, 0, 1, -12)
+	topBarCover.BackgroundColor3 = Theme.Sidebar
+	topBarCover.BorderSizePixel = 0
+	topBarCover.Parent = TopBar
+
+	MakeDraggable(TopBar, MainFrame, connections)
+
+	-- ชื่อหน้าต่าง
+	local TitleLabel = Instance.new("TextLabel")
+	TitleLabel.Size = UDim2.new(1, -110, 1, 0)
+	TitleLabel.Position = UDim2.new(0, 15, 0, 0)
+	TitleLabel.BackgroundTransparency = 1
+	TitleLabel.Text = "🎨 " .. windowTitle
+	TitleLabel.TextColor3 = Theme.Text
+	TitleLabel.Font = Enum.Font.GothamBold
+	TitleLabel.TextSize = 15
+	TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+	TitleLabel.Parent = TopBar
+
+	-- ==========================================
+	-- ปุ่ม Minimize
+	-- ==========================================
+	local MinBtn = Instance.new("TextButton")
+	MinBtn.Size = UDim2.new(0, 26, 0, 26)
+	MinBtn.Position = UDim2.new(1, -62, 0.5, -13)
+	MinBtn.BackgroundColor3 = Theme.ElementBg
+	MinBtn.Text = "─"
+	MinBtn.TextColor3 = Theme.SubText
+	MinBtn.Font = Enum.Font.GothamBold
+	MinBtn.TextSize = 14
+	MinBtn.AutoButtonColor = false
+	MinBtn.Parent = TopBar
+	ApplyCorner(MinBtn, 6)
+
+	connections:Track(MinBtn.MouseEnter:Connect(function()
+		Tween(MinBtn, 0.2, { BackgroundColor3 = Theme.Warning, TextColor3 = Theme.Background })
+	end))
+	connections:Track(MinBtn.MouseLeave:Connect(function()
+		Tween(MinBtn, 0.2, { BackgroundColor3 = Theme.ElementBg, TextColor3 = Theme.SubText })
+	end))
+
+	-- ==========================================
+	-- ปุ่ม Close
+	-- ==========================================
+	local CloseBtn = Instance.new("TextButton")
+	CloseBtn.Size = UDim2.new(0, 26, 0, 26)
+	CloseBtn.Position = UDim2.new(1, -32, 0.5, -13)
+	CloseBtn.BackgroundColor3 = Theme.ElementBg
+	CloseBtn.Text = "✕"
+	CloseBtn.TextColor3 = Theme.SubText
+	CloseBtn.Font = Enum.Font.GothamBold
+	CloseBtn.TextSize = 12
+	CloseBtn.AutoButtonColor = false
+	CloseBtn.Parent = TopBar
+	ApplyCorner(CloseBtn, 6)
+
+	connections:Track(CloseBtn.MouseEnter:Connect(function()
+		Tween(CloseBtn, 0.2, { BackgroundColor3 = Theme.Error, TextColor3 = Theme.Text })
+	end))
+	connections:Track(CloseBtn.MouseLeave:Connect(function()
+		Tween(CloseBtn, 0.2, { BackgroundColor3 = Theme.ElementBg, TextColor3 = Theme.SubText })
+	end))
+
+	-- ==========================================
+	-- 📦 Body (Sidebar + Content)
+	-- ==========================================
+	local Body = Instance.new("Frame")
+	Body.Name = "Body"
+	Body.Size = UDim2.new(1, 0, 1, -40)
+	Body.Position = UDim2.new(0, 0, 0, 40)
+	Body.BackgroundTransparency = 1
+	Body.Parent = MainFrame
+
+	-- ==========================================
+	-- 📑 Sidebar (แถบแท็บด้านซ้าย)
+	-- ==========================================
+	local Sidebar = Instance.new("Frame")
+	Sidebar.Name = "Sidebar"
+	Sidebar.Size = UDim2.new(0, 135, 1, 0)
+	Sidebar.BackgroundColor3 = Theme.Sidebar
+	Sidebar.BorderSizePixel = 0
+	Sidebar.Parent = Body
+
+	-- Tab Container (เลื่อนได้ถ้าแท็บเยอะ)
+	local TabContainer = Instance.new("ScrollingFrame")
+	TabContainer.Name = "TabContainer"
+	TabContainer.Size = UDim2.new(1, -10, 1, -15)
+	TabContainer.Position = UDim2.new(0, 5, 0, 10)
+	TabContainer.BackgroundTransparency = 1
+	TabContainer.ScrollBarThickness = 2
+	TabContainer.ScrollBarImageColor3 = Theme.Outline
+	TabContainer.BorderSizePixel = 0
+	TabContainer.CanvasSize = UDim2.new(0, 0, 0, 0)
+	TabContainer.Parent = Sidebar
+
+	local tabListLayout = Instance.new("UIListLayout")
+	tabListLayout.Padding = UDim.new(0, 4)
+	tabListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	tabListLayout.Parent = TabContainer
+
+	connections:Track(tabListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+		TabContainer.CanvasSize = UDim2.new(0, 0, 0, tabListLayout.AbsoluteContentSize.Y + 10)
+	end))
+
+	-- เส้นแบ่ง Sidebar กับ Content
+	local SidebarDivider = Instance.new("Frame")
+	SidebarDivider.Size = UDim2.new(0, 1, 1, 0)
+	SidebarDivider.Position = UDim2.new(0, 135, 0, 0)
+	SidebarDivider.BackgroundColor3 = Theme.Outline
+	SidebarDivider.BorderSizePixel = 0
+	SidebarDivider.Parent = Body
+
+	-- ==========================================
+	-- 📄 Content Area (พื้นที่แสดงเนื้อหาแต่ละแท็บ)
+	-- ==========================================
+	local ContentArea = Instance.new("Frame")
+	ContentArea.Name = "ContentArea"
+	ContentArea.Size = UDim2.new(1, -136, 1, 0)
+	ContentArea.Position = UDim2.new(0, 136, 0, 0)
+	ContentArea.BackgroundTransparency = 1
+	ContentArea.Parent = Body
+
+	-- ==========================================
+	-- 🔀 Tab Switching Logic
+	-- ==========================================
+	local function SwitchTab(targetTab)
+		if activeTab == targetTab then return end
+
+		-- ปิดแท็บเก่า
+		if activeTab then
+			activeTab._content.Visible = false
+			Tween(activeTab._button, 0.2, { BackgroundTransparency = 1 })
+			Tween(activeTab._label, 0.2, { TextColor3 = Theme.SubText })
+			Tween(activeTab._indicator, 0.2, { BackgroundTransparency = 1 })
+		end
+
+		-- เปิดแท็บใหม่
+		activeTab = targetTab
+		activeTab._content.Visible = true
+		Tween(activeTab._button, 0.2, { BackgroundColor3 = Theme.ActiveTab, BackgroundTransparency = 0 })
+		Tween(activeTab._label, 0.2, { TextColor3 = Theme.Text })
+		Tween(activeTab._indicator, 0.2, { BackgroundTransparency = 0 })
+	end
+
+	-- ==========================================
+	-- 📑 CreateTab — สร้างแท็บใหม่
+	-- ==========================================
+	function Window:CreateTab(tabName, tabIcon)
+		local Tab = {}
+		tabIcon = tabIcon or "📁"
+
+		-- ปุ่มแท็บใน Sidebar
+		local tabBtn = Instance.new("TextButton")
+		tabBtn.Size = UDim2.new(1, 0, 0, 33)
+		tabBtn.BackgroundColor3 = Theme.ActiveTab
+		tabBtn.BackgroundTransparency = 1
+		tabBtn.Text = ""
+		tabBtn.AutoButtonColor = false
+		tabBtn.Parent = TabContainer
+		ApplyCorner(tabBtn, 6)
+
+		-- แถบ accent ด้านซ้าย (แสดงว่า active)
+		local indicator = Instance.new("Frame")
+		indicator.Size = UDim2.new(0, 3, 0, 16)
+		indicator.Position = UDim2.new(0, 2, 0.5, -8)
+		indicator.BackgroundColor3 = Theme.Accent
+		indicator.BackgroundTransparency = 1
+		indicator.BorderSizePixel = 0
+		indicator.Parent = tabBtn
+		ApplyCorner(indicator, 2)
+
+		-- ชื่อแท็บ
+		local btnLabel = Instance.new("TextLabel")
+		btnLabel.Size = UDim2.new(1, -15, 1, 0)
+		btnLabel.Position = UDim2.new(0, 12, 0, 0)
+		btnLabel.BackgroundTransparency = 1
+		btnLabel.Text = tabIcon .. " " .. tabName
+		btnLabel.TextColor3 = Theme.SubText
+		btnLabel.Font = Enum.Font.GothamMedium
+		btnLabel.TextSize = 12
+		btnLabel.TextXAlignment = Enum.TextXAlignment.Left
+		btnLabel.TextTruncate = Enum.TextTruncate.AtEnd
+		btnLabel.Parent = tabBtn
+
+		-- Hover effect
+		connections:Track(tabBtn.MouseEnter:Connect(function()
+			if activeTab and activeTab._button == tabBtn then return end
+			Tween(tabBtn, 0.15, { BackgroundTransparency = 0.5, BackgroundColor3 = Theme.HoverBg })
+		end))
+		connections:Track(tabBtn.MouseLeave:Connect(function()
+			if activeTab and activeTab._button == tabBtn then return end
+			Tween(tabBtn, 0.15, { BackgroundTransparency = 1 })
+		end))
+
+		-- Content ScrollingFrame สำหรับแท็บนี้
+		local content = Instance.new("ScrollingFrame")
+		content.Name = "Tab_" .. tabName
+		content.Size = UDim2.new(1, -16, 1, -16)
+		content.Position = UDim2.new(0, 8, 0, 8)
+		content.BackgroundTransparency = 1
+		content.ScrollBarThickness = 3
+		content.ScrollBarImageColor3 = Theme.Outline
+		content.BorderSizePixel = 0
+		content.CanvasSize = UDim2.new(0, 0, 0, 0)
+		content.Visible = false
+		content.Parent = ContentArea
+
+		local contentLayout = Instance.new("UIListLayout")
+		contentLayout.Padding = UDim.new(0, 8)
+		contentLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+		contentLayout.SortOrder = Enum.SortOrder.LayoutOrder
+		contentLayout.Parent = content
+
+		ApplyPadding(content, 4, 4, 0, 0)
+
+		connections:Track(contentLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+			content.CanvasSize = UDim2.new(0, 0, 0, contentLayout.AbsoluteContentSize.Y + 15)
+		end))
+
+		-- เก็บ reference สำหรับ tab switching
+		Tab._button = tabBtn
+		Tab._label = btnLabel
+		Tab._indicator = indicator
+		Tab._content = content
+
+		-- กดเลือกแท็บ
+		connections:Track(tabBtn.MouseButton1Click:Connect(function()
+			SwitchTab(Tab)
+		end))
+
+		table.insert(tabs, Tab)
+
+		-- เลือกแท็บแรกอัตโนมัติ
+		if #tabs == 1 then
+			SwitchTab(Tab)
+		end
+
+		-- ======================================
+		-- 📝 CreateLabel — หัวข้อหมวดหมู่
+		-- ======================================
+		function Tab:CreateLabel(text)
+			local obj = {}
+
+			local frame = Instance.new("Frame")
+			frame.Size = UDim2.new(1, 0, 0, 22)
+			frame.BackgroundTransparency = 1
+			frame.Parent = content
+
+			local lbl = Instance.new("TextLabel")
+			lbl.Size = UDim2.new(1, -5, 1, 0)
+			lbl.Position = UDim2.new(0, 5, 0, 0)
+			lbl.BackgroundTransparency = 1
+			lbl.Text = text
+			lbl.TextColor3 = Theme.DimText
+			lbl.Font = Enum.Font.GothamBold
+			lbl.TextSize = 11
+			lbl.TextXAlignment = Enum.TextXAlignment.Left
+			lbl.Parent = frame
+
+			-- เส้นแบ่งใต้หัวข้อ
+			local sep = Instance.new("Frame")
+			sep.Size = UDim2.new(1, -10, 0, 1)
+			sep.Position = UDim2.new(0, 5, 1, -1)
+			sep.BackgroundColor3 = Theme.Outline
+			sep.BackgroundTransparency = 0.5
+			sep.BorderSizePixel = 0
+			sep.Parent = frame
+
+			function obj:SetText(t) lbl.Text = t end
+			function obj:SetVisible(v) frame.Visible = v end
+			function obj:Destroy() frame:Destroy() end
+			return obj
+		end
+
+		-- ======================================
+		-- 🔘 CreateButton — ปุ่มกด (มี debounce)
+		-- ======================================
+		function Tab:CreateButton(text, callback)
+			local obj = {}
+			local debounce = false
+
+			local frame = Instance.new("Frame")
+			frame.Size = UDim2.new(1, 0, 0, 36)
+			frame.BackgroundColor3 = Theme.ElementBg
+			frame.Parent = content
+			ApplyCorner(frame, 8)
+			local stroke = ApplyStroke(frame, Theme.Outline)
+
+			local btn = Instance.new("TextButton")
+			btn.Size = UDim2.new(1, 0, 1, 0)
+			btn.BackgroundTransparency = 1
+			btn.Text = text
+			btn.TextColor3 = Theme.Text
+			btn.Font = Enum.Font.GothamMedium
+			btn.TextSize = 13
+			btn.AutoButtonColor = false
+			btn.Parent = frame
+
+			connections:Track(btn.MouseEnter:Connect(function()
+				Tween(frame, 0.2, { BackgroundColor3 = Theme.HoverBg })
+				Tween(stroke, 0.2, { Color = Theme.Accent })
+			end))
+
+			connections:Track(btn.MouseLeave:Connect(function()
+				Tween(frame, 0.2, { BackgroundColor3 = Theme.ElementBg })
+				Tween(stroke, 0.2, { Color = Theme.Outline })
+			end))
+
+			connections:Track(btn.MouseButton1Click:Connect(function()
+				if debounce then return end
+				debounce = true
+
+				-- Click animation (ย่อ-ขยาย)
+				Tween(frame, 0.08, { Size = UDim2.new(0.97, 0, 0, 33) })
+				task.wait(0.08)
+				Tween(frame, 0.12, { Size = UDim2.new(1, 0, 0, 36) })
+
+				if callback then task.spawn(callback) end
+				task.wait(0.2)
+				debounce = false
+			end))
+
+			function obj:SetText(t) btn.Text = t end
+			function obj:SetCallback(fn) callback = fn end
+			function obj:SetVisible(v) frame.Visible = v end
+			function obj:Destroy() frame:Destroy() end
+			return obj
+		end
+
+		-- ======================================
+		-- 🔄 CreateToggle — สวิตช์เปิด/ปิด
+		-- ======================================
+		function Tab:CreateToggle(text, default, callback)
+			local obj = {}
+			local toggled = default or false
+
+			local frame = Instance.new("Frame")
+			frame.Size = UDim2.new(1, 0, 0, 36)
+			frame.BackgroundColor3 = Theme.ElementBg
+			frame.Parent = content
+			ApplyCorner(frame, 8)
+			ApplyStroke(frame, Theme.Outline)
+
+			local lbl = Instance.new("TextLabel")
+			lbl.Size = UDim2.new(1, -60, 1, 0)
+			lbl.Position = UDim2.new(0, 12, 0, 0)
+			lbl.BackgroundTransparency = 1
+			lbl.Text = text
+			lbl.TextColor3 = Theme.Text
+			lbl.Font = Enum.Font.GothamMedium
+			lbl.TextSize = 13
+			lbl.TextXAlignment = Enum.TextXAlignment.Left
+			lbl.Parent = frame
+
+			-- พื้นหลังสวิตช์
+			local switchBg = Instance.new("Frame")
+			switchBg.Size = UDim2.new(0, 36, 0, 18)
+			switchBg.Position = UDim2.new(1, -48, 0.5, -9)
+			switchBg.BackgroundColor3 = toggled and Theme.Accent or Theme.SliderBg
+			switchBg.BorderSizePixel = 0
+			switchBg.Parent = frame
+			ApplyCorner(switchBg, 9)
+
+			-- ปุ่มกลม (knob)
+			local knob = Instance.new("Frame")
+			knob.Size = UDim2.new(0, 12, 0, 12)
+			knob.Position = UDim2.new(0, toggled and 21 or 3, 0.5, -6)
+			knob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+			knob.BorderSizePixel = 0
+			knob.Parent = switchBg
+			ApplyCorner(knob, 6)
+
+			local btn = Instance.new("TextButton")
+			btn.Size = UDim2.new(1, 0, 1, 0)
+			btn.BackgroundTransparency = 1
+			btn.Text = ""
+			btn.Parent = frame
+
+			local function UpdateVisual()
+				Tween(switchBg, 0.25, { BackgroundColor3 = toggled and Theme.Accent or Theme.SliderBg })
+				Tween(knob, 0.25, { Position = UDim2.new(0, toggled and 21 or 3, 0.5, -6) })
+			end
+
+			connections:Track(btn.MouseButton1Click:Connect(function()
+				toggled = not toggled
+				UpdateVisual()
+				if callback then task.spawn(callback, toggled) end
+			end))
+
+			function obj:Set(v) toggled = v; UpdateVisual(); if callback then task.spawn(callback, toggled) end end
+			function obj:Get() return toggled end
+			function obj:SetText(t) lbl.Text = t end
+			function obj:SetVisible(v) frame.Visible = v end
+			function obj:Destroy() frame:Destroy() end
+			return obj
+		end
+
+		-- ======================================
+		-- 📏 CreateSlider — ปรับค่าตัวเลข
+		-- ======================================
+		function Tab:CreateSlider(text, min, max, default, callback)
+			local obj = {}
+			local value = math.clamp(default or min, min, max)
+			local sliding = false
+
+			local frame = Instance.new("Frame")
+			frame.Size = UDim2.new(1, 0, 0, 52)
+			frame.BackgroundColor3 = Theme.ElementBg
+			frame.Parent = content
+			ApplyCorner(frame, 8)
+			ApplyStroke(frame, Theme.Outline)
+
+			local lbl = Instance.new("TextLabel")
+			lbl.Size = UDim2.new(1, -55, 0, 20)
+			lbl.Position = UDim2.new(0, 12, 0, 4)
+			lbl.BackgroundTransparency = 1
+			lbl.Text = text
+			lbl.TextColor3 = Theme.Text
+			lbl.Font = Enum.Font.GothamMedium
+			lbl.TextSize = 13
+			lbl.TextXAlignment = Enum.TextXAlignment.Left
+			lbl.Parent = frame
+
+			local valLbl = Instance.new("TextLabel")
+			valLbl.Size = UDim2.new(0, 45, 0, 20)
+			valLbl.Position = UDim2.new(1, -52, 0, 4)
+			valLbl.BackgroundTransparency = 1
+			valLbl.Text = tostring(math.floor(value))
+			valLbl.TextColor3 = Theme.Accent
+			valLbl.Font = Enum.Font.GothamBold
+			valLbl.TextSize = 13
+			valLbl.TextXAlignment = Enum.TextXAlignment.Right
+			valLbl.Parent = frame
+
+			-- แท่งพื้นหลัง
+			local track = Instance.new("Frame")
+			track.Size = UDim2.new(1, -24, 0, 5)
+			track.Position = UDim2.new(0, 12, 0, 34)
+			track.BackgroundColor3 = Theme.SliderBg
+			track.BorderSizePixel = 0
+			track.Parent = frame
+			ApplyCorner(track, 3)
+
+			-- แท่งสี (fill)
+			local fill = Instance.new("Frame")
+			fill.Size = UDim2.new((value - min) / math.max(max - min, 1), 0, 1, 0)
+			fill.BackgroundColor3 = Theme.Accent
+			fill.BorderSizePixel = 0
+			fill.Parent = track
+			ApplyCorner(fill, 3)
+
+			-- ปุ่มกลม (knob)
+			local sliderKnob = Instance.new("Frame")
+			sliderKnob.Size = UDim2.new(0, 12, 0, 12)
+			sliderKnob.Position = UDim2.new((value - min) / math.max(max - min, 1), -6, 0.5, -6)
+			sliderKnob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+			sliderKnob.BorderSizePixel = 0
+			sliderKnob.ZIndex = 2
+			sliderKnob.Parent = track
+			ApplyCorner(sliderKnob, 6)
+
+			-- ปุ่มกดใส (ครอบพื้นที่ slider)
+			local hitArea = Instance.new("TextButton")
+			hitArea.Size = UDim2.new(1, -24, 0, 22)
+			hitArea.Position = UDim2.new(0, 12, 0, 24)
+			hitArea.BackgroundTransparency = 1
+			hitArea.Text = ""
+			hitArea.ZIndex = 3
+			hitArea.Parent = frame
+
+			local function UpdateSlider(newValue)
+				value = math.clamp(math.floor(newValue), min, max)
+				local ratio = (value - min) / math.max(max - min, 1)
+				fill.Size = UDim2.new(ratio, 0, 1, 0)
+				sliderKnob.Position = UDim2.new(ratio, -6, 0.5, -6)
+				valLbl.Text = tostring(value)
+				if callback then task.spawn(callback, value) end
+			end
+
+			connections:Track(hitArea.InputBegan:Connect(function(input)
+				if input.UserInputType == Enum.UserInputType.MouseButton1
+					or input.UserInputType == Enum.UserInputType.Touch then
+					sliding = true
+					local ratio = math.clamp(
+						(input.Position.X - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1
+					)
+					UpdateSlider(min + (max - min) * ratio)
+				end
+			end))
+
+			-- ปล่อย mouse ที่ไหนก็ได้ → หยุด slide
+			connections:Track(UserInputService.InputEnded:Connect(function(input)
+				if sliding and (input.UserInputType == Enum.UserInputType.MouseButton1
+					or input.UserInputType == Enum.UserInputType.Touch) then
+					sliding = false
+				end
+			end))
+
+			-- ลาก mouse → อัพเดทค่า
+			connections:Track(UserInputService.InputChanged:Connect(function(input)
+				if sliding and (input.UserInputType == Enum.UserInputType.MouseMovement
+					or input.UserInputType == Enum.UserInputType.Touch) then
+					local ratio = math.clamp(
+						(input.Position.X - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1
+					)
+					UpdateSlider(min + (max - min) * ratio)
+				end
+			end))
+
+			function obj:Set(v) UpdateSlider(v) end
+			function obj:Get() return value end
+			function obj:SetText(t) lbl.Text = t end
+			function obj:SetVisible(v) frame.Visible = v end
+			function obj:Destroy() frame:Destroy() end
+			return obj
+		end
+
+		-- ======================================
+		-- 📋 CreateDropdown — เลือกจากรายการ
+		-- ======================================
+		function Tab:CreateDropdown(text, options, default, callback)
+			local obj = {}
+			local selected = default or (options and options[1]) or ""
+			local isOpen = false
+
+			local frame = Instance.new("Frame")
+			frame.Size = UDim2.new(1, 0, 0, 36)
+			frame.BackgroundColor3 = Theme.ElementBg
+			frame.ClipsDescendants = false
+			frame.ZIndex = 5
+			frame.Parent = content
+			ApplyCorner(frame, 8)
+			ApplyStroke(frame, Theme.Outline)
+
+			local lbl = Instance.new("TextLabel")
+			lbl.Size = UDim2.new(0.5, -10, 1, 0)
+			lbl.Position = UDim2.new(0, 12, 0, 0)
+			lbl.BackgroundTransparency = 1
+			lbl.Text = text
+			lbl.TextColor3 = Theme.Text
+			lbl.Font = Enum.Font.GothamMedium
+			lbl.TextSize = 13
+			lbl.TextXAlignment = Enum.TextXAlignment.Left
+			lbl.ZIndex = 5
+			lbl.Parent = frame
+
+			-- ปุ่มแสดงค่าที่เลือก
+			local selBtn = Instance.new("TextButton")
+			selBtn.Size = UDim2.new(0.5, -10, 0, 24)
+			selBtn.Position = UDim2.new(0.5, 0, 0.5, -12)
+			selBtn.BackgroundColor3 = Theme.InputBg
+			selBtn.Text = selected .. " ▾"
+			selBtn.TextColor3 = Theme.SubText
+			selBtn.Font = Enum.Font.GothamMedium
+			selBtn.TextSize = 12
+			selBtn.AutoButtonColor = false
+			selBtn.ZIndex = 5
+			selBtn.Parent = frame
+			ApplyCorner(selBtn, 6)
+
+			-- รายการตัวเลือก
+			local dropList = Instance.new("ScrollingFrame")
+			dropList.Size = UDim2.new(0.5, -10, 0, 0)
+			dropList.Position = UDim2.new(0.5, 0, 1, 4)
+			dropList.BackgroundColor3 = Theme.ElementBg
+			dropList.ScrollBarThickness = 2
+			dropList.ScrollBarImageColor3 = Theme.Outline
+			dropList.BorderSizePixel = 0
+			dropList.ClipsDescendants = true
+			dropList.Visible = false
+			dropList.ZIndex = 20
+			dropList.Parent = frame
+			ApplyCorner(dropList, 6)
+			ApplyStroke(dropList, Theme.Accent)
+
+			local dropLayout = Instance.new("UIListLayout")
+			dropLayout.Padding = UDim.new(0, 2)
+			dropLayout.SortOrder = Enum.SortOrder.LayoutOrder
+			dropLayout.Parent = dropList
+			ApplyPadding(dropList, 4, 4, 4, 4)
+
+			local optionBtns = {}
+
+			local function BuildOptions()
+				for _, b in optionBtns do b:Destroy() end
+				table.clear(optionBtns)
+
+				for _, opt in options do
+					local optBtn = Instance.new("TextButton")
+					optBtn.Size = UDim2.new(1, 0, 0, 24)
+					optBtn.BackgroundColor3 = (opt == selected) and Theme.Accent or Theme.HoverBg
+					optBtn.BackgroundTransparency = (opt == selected) and 0 or 0.5
+					optBtn.Text = opt
+					optBtn.TextColor3 = Theme.Text
+					optBtn.Font = Enum.Font.Gotham
+					optBtn.TextSize = 12
+					optBtn.AutoButtonColor = false
+					optBtn.ZIndex = 21
+					optBtn.Parent = dropList
+					ApplyCorner(optBtn, 4)
+
+					connections:Track(optBtn.MouseEnter:Connect(function()
+						if opt ~= selected then
+							Tween(optBtn, 0.15, { BackgroundTransparency = 0, BackgroundColor3 = Theme.HoverBg })
+						end
+					end))
+					connections:Track(optBtn.MouseLeave:Connect(function()
+						if opt ~= selected then
+							Tween(optBtn, 0.15, { BackgroundTransparency = 0.5 })
+						end
+					end))
+
+					connections:Track(optBtn.MouseButton1Click:Connect(function()
+						selected = opt
+						selBtn.Text = selected .. " ▾"
+
+						-- อัพเดท highlight
+						for _, b in optionBtns do
+							if b.Text == opt then
+								Tween(b, 0.15, { BackgroundColor3 = Theme.Accent, BackgroundTransparency = 0 })
+							else
+								Tween(b, 0.15, { BackgroundColor3 = Theme.HoverBg, BackgroundTransparency = 0.5 })
+							end
+						end
+
+						-- ปิด dropdown
+						isOpen = false
+						local tw = Tween(dropList, 0.2, { Size = UDim2.new(0.5, -10, 0, 0) })
+						tw.Completed:Once(function()
+							dropList.Visible = false
+						end)
+
+						if callback then task.spawn(callback, selected) end
+					end))
+
+					table.insert(optionBtns, optBtn)
+				end
+			end
+
+			BuildOptions()
+
+			-- เปิด/ปิด dropdown
+			connections:Track(selBtn.MouseButton1Click:Connect(function()
+				isOpen = not isOpen
+				if isOpen then
+					dropList.Visible = true
+					local targetH = math.min(#options * 26 + 10, 140)
+					Tween(dropList, 0.2, { Size = UDim2.new(0.5, -10, 0, targetH) })
+				else
+					local tw = Tween(dropList, 0.2, { Size = UDim2.new(0.5, -10, 0, 0) })
+					tw.Completed:Once(function() dropList.Visible = false end)
+				end
+			end))
+
+			function obj:Set(opt)
+				selected = opt; selBtn.Text = opt .. " ▾"
+				for _, b in optionBtns do
+					local match = (b.Text == opt)
+					Tween(b, 0.15, {
+						BackgroundColor3 = match and Theme.Accent or Theme.HoverBg,
+						BackgroundTransparency = match and 0 or 0.5,
+					})
+				end
+				if callback then task.spawn(callback, selected) end
+			end
+			function obj:Get() return selected end
+			function obj:SetOptions(newOpts) options = newOpts; BuildOptions() end
+			function obj:SetVisible(v) frame.Visible = v end
+			function obj:Destroy() frame:Destroy() end
+			return obj
+		end
+
+		-- ======================================
+		-- ✏️ CreateInput — ช่องพิมพ์ข้อความ
+		-- ======================================
+		function Tab:CreateInput(text, placeholder, callback)
+			local obj = {}
+
+			local frame = Instance.new("Frame")
+			frame.Size = UDim2.new(1, 0, 0, 36)
+			frame.BackgroundColor3 = Theme.ElementBg
+			frame.Parent = content
+			ApplyCorner(frame, 8)
+			ApplyStroke(frame, Theme.Outline)
+
+			local lbl = Instance.new("TextLabel")
+			lbl.Size = UDim2.new(0.4, -10, 1, 0)
+			lbl.Position = UDim2.new(0, 12, 0, 0)
+			lbl.BackgroundTransparency = 1
+			lbl.Text = text
+			lbl.TextColor3 = Theme.Text
+			lbl.Font = Enum.Font.GothamMedium
+			lbl.TextSize = 13
+			lbl.TextXAlignment = Enum.TextXAlignment.Left
+			lbl.Parent = frame
+
+			local inputBox = Instance.new("TextBox")
+			inputBox.Size = UDim2.new(0.6, -15, 0, 24)
+			inputBox.Position = UDim2.new(0.4, 0, 0.5, -12)
+			inputBox.BackgroundColor3 = Theme.InputBg
+			inputBox.Text = ""
+			inputBox.PlaceholderText = placeholder or "Type here..."
+			inputBox.PlaceholderColor3 = Theme.DimText
+			inputBox.TextColor3 = Theme.Text
+			inputBox.Font = Enum.Font.Gotham
+			inputBox.TextSize = 12
+			inputBox.ClearTextOnFocus = false
+			inputBox.Parent = frame
+			ApplyCorner(inputBox, 6)
+			ApplyPadding(inputBox, 0, 0, 8, 8)
+
+			local inputStroke = ApplyStroke(inputBox, Theme.Outline)
+
+			connections:Track(inputBox.Focused:Connect(function()
+				Tween(inputStroke, 0.2, { Color = Theme.Accent })
+			end))
+
+			connections:Track(inputBox.FocusLost:Connect(function(enterPressed)
+				Tween(inputStroke, 0.2, { Color = Theme.Outline })
+				if callback then task.spawn(callback, inputBox.Text, enterPressed) end
+			end))
+
+			function obj:Set(t) inputBox.Text = t end
+			function obj:Get() return inputBox.Text end
+			function obj:SetPlaceholder(t) inputBox.PlaceholderText = t end
+			function obj:SetVisible(v) frame.Visible = v end
+			function obj:Destroy() frame:Destroy() end
+			return obj
+		end
+
+		-- ======================================
+		-- ⌨️ CreateKeybind — ตั้งค่าปุ่มลัด
+		-- ======================================
+		function Tab:CreateKeybind(text, default, callback)
+			local obj = {}
+			local currentKey = default or Enum.KeyCode.Unknown
+			local listening = false
+
+			local frame = Instance.new("Frame")
+			frame.Size = UDim2.new(1, 0, 0, 36)
+			frame.BackgroundColor3 = Theme.ElementBg
+			frame.Parent = content
+			ApplyCorner(frame, 8)
+			ApplyStroke(frame, Theme.Outline)
+
+			local lbl = Instance.new("TextLabel")
+			lbl.Size = UDim2.new(1, -95, 1, 0)
+			lbl.Position = UDim2.new(0, 12, 0, 0)
+			lbl.BackgroundTransparency = 1
+			lbl.Text = text
+			lbl.TextColor3 = Theme.Text
+			lbl.Font = Enum.Font.GothamMedium
+			lbl.TextSize = 13
+			lbl.TextXAlignment = Enum.TextXAlignment.Left
+			lbl.Parent = frame
+
+			local keyBtn = Instance.new("TextButton")
+			keyBtn.Size = UDim2.new(0, 75, 0, 24)
+			keyBtn.Position = UDim2.new(1, -85, 0.5, -12)
+			keyBtn.BackgroundColor3 = Theme.InputBg
+			keyBtn.Text = currentKey.Name
+			keyBtn.TextColor3 = Theme.Accent
+			keyBtn.Font = Enum.Font.GothamBold
+			keyBtn.TextSize = 12
+			keyBtn.AutoButtonColor = false
+			keyBtn.Parent = frame
+			ApplyCorner(keyBtn, 6)
+			local kbStroke = ApplyStroke(keyBtn, Theme.Outline)
+
+			connections:Track(keyBtn.MouseButton1Click:Connect(function()
+				if listening then return end
+				listening = true
+				keyBtn.Text = "..."
+				Tween(kbStroke, 0.2, { Color = Theme.Accent })
+			end))
+
+			connections:Track(UserInputService.InputBegan:Connect(function(input, gameProcessed)
+				if listening then
+					if input.UserInputType == Enum.UserInputType.Keyboard then
+						if input.KeyCode == Enum.KeyCode.Escape then
+							-- ยกเลิก
+							keyBtn.Text = currentKey.Name
+						else
+							currentKey = input.KeyCode
+							keyBtn.Text = currentKey.Name
+						end
+						listening = false
+						Tween(kbStroke, 0.2, { Color = Theme.Outline })
+					end
+				else
+					-- กดปุ่มลัดที่ตั้งไว้ → เรียก callback
+					if not gameProcessed
+						and input.UserInputType == Enum.UserInputType.Keyboard
+						and input.KeyCode == currentKey then
+						if callback then task.spawn(callback, currentKey) end
+					end
+				end
+			end))
+
+			function obj:Set(key) currentKey = key; keyBtn.Text = key.Name end
+			function obj:Get() return currentKey end
+			function obj:SetText(t) lbl.Text = t end
+			function obj:SetVisible(v) frame.Visible = v end
+			function obj:Destroy() frame:Destroy() end
+			return obj
+		end
+
+		return Tab
+	end
+
+	-- ==========================================
+	-- ปุ่ม Minimize — ย่อ/ขยายหน้าต่าง
+	-- ==========================================
+	local fullSize = windowSize
+
+	connections:Track(MinBtn.MouseButton1Click:Connect(function()
+		isMinimized = not isMinimized
+		if isMinimized then
+			Tween(MainFrame, 0.3, { Size = UDim2.new(0, fullSize.X.Offset, 0, 40) })
+			Body.Visible = false
+			MinBtn.Text = "□"
+		else
+			Body.Visible = true
+			Tween(MainFrame, 0.3, { Size = fullSize }, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+			MinBtn.Text = "─"
+		end
+	end))
+
+	-- ==========================================
+	-- ปุ่ม Close — ปิดหน้าต่าง + cleanup ทุก connection
+	-- ==========================================
+	connections:Track(CloseBtn.MouseButton1Click:Connect(function()
+		local tw = Tween(MainFrame, 0.3, {
+			Size = UDim2.new(0, 0, 0, 0),
+		}, Enum.EasingStyle.Back, Enum.EasingDirection.In)
+		tw.Completed:Once(function()
+			connections:DisconnectAll()
+			_activeTracker = nil
+			ScreenGui:Destroy()
+		end)
+	end))
+
+	-- ==========================================
+	-- ปุ่มลัด Toggle UI (ค่าเริ่มต้น: RightShift)
+	-- ==========================================
+	connections:Track(UserInputService.InputBegan:Connect(function(input, gameProcessed)
+		if gameProcessed then return end
+		if input.KeyCode == toggleKey then
+			isVisible = not isVisible
+			MainFrame.Visible = isVisible
+		end
+	end))
+
+	-- ==========================================
+	-- 🔧 Public Window Methods
+	-- ==========================================
+
+	function Window:Toggle()
+		isVisible = not isVisible
+		MainFrame.Visible = isVisible
+	end
+
+	function Window:SetVisible(visible)
+		isVisible = visible
+		MainFrame.Visible = isVisible
+	end
+
+	function Window:SetTitle(newTitle)
+		TitleLabel.Text = "🎨 " .. newTitle
+	end
+
+	function Window:Destroy()
+		connections:DisconnectAll()
+		_activeTracker = nil
+		if ScreenGui then ScreenGui:Destroy() end
+	end
+
+	return Window
 end
 
 return Diq
