@@ -17,6 +17,7 @@ local DiqUI    = loadstring(game:HttpGet(BASE_URL .. "DiqUILib.lua?_=" .. tostri
 local DiqIcons = loadstring(game:HttpGet(BASE_URL .. "DiqIcons.lua?_=" .. tostring(tick())))()
 local Movement = loadstring(game:HttpGet(BASE_URL .. "MovementSystem.lua?_=" .. tostring(tick())))()
 local ESP      = loadstring(game:HttpGet(BASE_URL .. "ESPSystem.lua?_=" .. tostring(tick())))()
+local Aimbot   = loadstring(game:HttpGet(BASE_URL .. "AimbotSystem.lua?_=" .. tostring(tick())))()
 local Misc     = loadstring(game:HttpGet(BASE_URL .. "MiscSystem.lua?_=" .. tostring(tick())))()
 
 -- ⭐ โหลด Icon เข้า Library (ทำครั้งเดียว)
@@ -131,6 +132,49 @@ movementTab:CreateButton("Unanchor", function()
 end, { Icon = "shield" })
 
 -- ==========================================
+-- 🎯 Tab: Combat (ใช้ Lucide icon "crosshair")
+-- ==========================================
+local combatTab = MyWindow:CreateTab("Combat", "crosshair")
+
+combatTab:CreateLabel("AIMBOT MASTER")
+
+combatTab:CreateToggle("Enable Aimbot (Hold Right Click)", false, function(state)
+	Aimbot.SetEnabled(state)
+	if state then
+		DiqUI:Notify("Aimbot Enabled", "Hold Right Click to aim at targets", 3, "info")
+	end
+end, { Icon = "crosshair" })
+
+combatTab:CreateToggle("Show FOV Circle", false, function(state)
+	Aimbot.SetShowFOV(state)
+end, { Icon = "circle" })
+
+combatTab:CreateLabel("AIMBOT SETTINGS")
+
+combatTab:CreateSlider("FOV Size", 10, 800, 150, function(value)
+	Aimbot.SetFOVRadius(value)
+end)
+
+combatTab:CreateSlider("Smoothness", 1, 100, 50, function(value)
+    -- Map 1-100 to 0.01-1
+	Aimbot.SetSmoothing(value / 100)
+end)
+
+combatTab:CreateDropdown("Aim Part", { "Head", "Torso", "HumanoidRootPart" }, "Head", function(selected)
+	Aimbot.SetAimPart(selected)
+end)
+
+combatTab:CreateLabel("CHECKS")
+
+combatTab:CreateToggle("Team Check", true, function(state)
+	Aimbot.SetTeamCheck(state)
+end, { Icon = "users" })
+
+combatTab:CreateToggle("Wall Check (Visible Only)", false, function(state)
+	Aimbot.SetWallCheck(state)
+end, { Icon = "eye-off" })
+
+-- ==========================================
 -- 👁️ Tab: Visuals (ใช้ Lucide icon "eye")
 -- ==========================================
 local visualTab = MyWindow:CreateTab("Visuals", "eye")
@@ -194,16 +238,6 @@ settingsTab:CreateButton("Rejoin Server", function()
 		Misc.Rejoin()
 	end)
 end, { Icon = "rotate-cw" })
-
-settingsTab:CreateButton("Server Hop", function()
-	DiqUI:Notify("Server", "Searching for a new server...", 3, "info")
-	task.spawn(function()
-		local success, msg = Misc.ServerHop()
-		if not success then
-			DiqUI:Notify("Server Hop Failed", msg, 4, "warning")
-		end
-	end)
-end, { Icon = "server" })
 
 settingsTab:CreateLabel("ABOUT")
 
