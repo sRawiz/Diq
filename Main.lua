@@ -213,6 +213,18 @@ visualTab:CreateToggle("Use Team Color", true, function(state)
 	ESP.SetUseTeamColor(state)
 end, { Icon = "users" })
 
+visualTab:CreateLabel("WORLD VISUALS")
+
+visualTab:CreateToggle("Fullbright & No Fog", false, function(state)
+	Misc.SetFullbright(state)
+	DiqUI:Notify(
+		state and "Fullbright Enabled" or "Fullbright Disabled",
+		state and "Map lighting set to maximum" or "Lighting restored",
+		2,
+		state and "info" or "warning"
+	)
+end, { Icon = "sun" })
+
 -- ==========================================
 -- ⚙️ Tab: Settings (ใช้ Lucide icon "settings")
 -- ==========================================
