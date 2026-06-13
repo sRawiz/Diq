@@ -77,7 +77,12 @@ local function GetClosestTarget()
 
     for _, player in ipairs(Players:GetPlayers()) do
         if player ~= LocalPlayer then
-            if Config.TeamCheck and player.Team and player.Team == LocalPlayer.Team then continue end
+            -- Team Check (Skip if teammate, UNLESS they are Neutral/FFA)
+            if Config.TeamCheck then
+                if player.Team and player.Team == LocalPlayer.Team and not player.Neutral then
+                    continue
+                end
+            end
             
             local char = player.Character
             if char then
