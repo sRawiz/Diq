@@ -207,6 +207,13 @@ function Diq:Notify(title, message, duration, notifType)
 	elseif notifType == "warning" then accentColor = Theme.Warning
 	elseif notifType == "error" then accentColor = Theme.Error end
 
+	-- จำกัดจำนวนแจ้งเตือน (ให้แสดงแค่อันเดียว ลบของเก่าทิ้งทั้งหมด)
+	for _, child in ipairs(NotificationHolder:GetChildren()) do
+		if child:IsA("Frame") then
+			child:Destroy()
+		end
+	end
+
 	-- Notification frame
 	local notif = Instance.new("Frame")
 	notif.Size = UDim2.new(1, 0, 0, 68)
