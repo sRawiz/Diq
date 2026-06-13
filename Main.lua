@@ -82,7 +82,7 @@ end, {
 	}
 })
 
-movementTab:CreateToggle("Infinity Jump", false, function(state)
+movementTab:CreateToggle("Infinite Jump", false, function(state)
 	Movement.SetInfinityJump(state)
 end, { Icon = "chevron-up" })
 

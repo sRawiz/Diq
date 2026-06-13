@@ -1266,17 +1266,29 @@ function Diq:CreateWindow(config)
 
 			-- ปุ่มแสดงค่าที่เลือก
 			local selBtn = Instance.new("TextButton")
-			selBtn.Size = UDim2.new(0.5, -10, 0, 24)
-			selBtn.Position = UDim2.new(0.5, 0, 0.5, -12)
+			selBtn.Size = UDim2.new(0.5, -10, 0, 26)
+			selBtn.Position = UDim2.new(0.5, 0, 0.5, -13)
 			selBtn.BackgroundColor3 = Theme.InputBg
-			selBtn.Text = selected .. " ▾"
-			selBtn.TextColor3 = Theme.SubText
-			selBtn.Font = Enum.Font.GothamMedium
-			selBtn.TextSize = 12
+			selBtn.Text = ""
 			selBtn.AutoButtonColor = false
 			selBtn.ZIndex = 5
 			selBtn.Parent = frame
 			ApplyCorner(selBtn, 6)
+
+			local selText = Instance.new("TextLabel")
+			selText.Size = UDim2.new(1, -30, 1, 0)
+			selText.Position = UDim2.new(0, 10, 0, 0)
+			selText.BackgroundTransparency = 1
+			selText.Text = selected
+			selText.TextColor3 = Theme.Text
+			selText.Font = Enum.Font.GothamMedium
+			selText.TextSize = 12
+			selText.TextXAlignment = Enum.TextXAlignment.Left
+			selText.ZIndex = 5
+			selText.Parent = selBtn
+
+			local dropIcon = AttachIcon("chevron-down", selBtn, 14, Theme.SubText, UDim2.new(1, -22, 0.5, -7))
+			if dropIcon then dropIcon.ZIndex = 5 end
 
 			-- รายการตัวเลือก
 			local dropList = Instance.new("ScrollingFrame")
@@ -1332,7 +1344,7 @@ function Diq:CreateWindow(config)
 
 					connections:Track(optBtn.MouseButton1Click:Connect(function()
 						selected = opt
-						selBtn.Text = selected .. " ▾"
+						selText.Text = selected
 
 						-- อัพเดท highlight
 						for _, b in optionBtns do
@@ -1345,6 +1357,7 @@ function Diq:CreateWindow(config)
 
 						-- ปิด dropdown
 						isOpen = false
+						if dropIcon then Tween(dropIcon, 0.2, { Rotation = 0 }) end
 						local tw = Tween(dropList, 0.2, { Size = UDim2.new(0.5, -10, 0, 0) })
 						tw.Completed:Once(function()
 							dropList.Visible = false
@@ -1362,6 +1375,8 @@ function Diq:CreateWindow(config)
 			-- เปิด/ปิด dropdown
 			connections:Track(selBtn.MouseButton1Click:Connect(function()
 				isOpen = not isOpen
+				if dropIcon then Tween(dropIcon, 0.2, { Rotation = isOpen and 180 or 0 }) end
+				
 				if isOpen then
 					dropList.Visible = true
 					local targetH = math.min(#options * 26 + 10, 140)
@@ -1373,7 +1388,7 @@ function Diq:CreateWindow(config)
 			end))
 
 			function obj:Set(opt)
-				selected = opt; selBtn.Text = opt .. " ▾"
+				selected = opt; selText.Text = opt
 				for _, b in optionBtns do
 					local match = (b.Text == opt)
 					Tween(b, 0.15, {
