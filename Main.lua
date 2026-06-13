@@ -43,6 +43,32 @@ local speedToggle = movementTab:CreateToggle("วิ่งเร็ว (CFrame S
 	Movement.SetSpeed(state)
 end, { Icon = "zap" })
 
+movementTab:CreateLabel("KEYBINDS")
+
+movementTab:CreateKeybind("ปุ่มเปิด/ปิด บิน", Enum.KeyCode.F, function()
+	local isFlying = Movement.ToggleFly()
+	flyToggle:Set(isFlying)
+	DiqUI:Notify(
+		isFlying and "เปิดโหมดบิน" or "ปิดโหมดบิน",
+		isFlying and "กดปุ่มเดิมเพื่อปิด" or "กลับสู่โหมดปกติ",
+		2,
+		isFlying and "info" or "warning"
+	)
+end)
+
+movementTab:CreateKeybind("ปุ่มวิ่งเร็ว", Enum.KeyCode.G, function()
+	local isSpeed = Movement.ToggleSpeed()
+	speedToggle:Set(isSpeed)
+	DiqUI:Notify(
+		isSpeed and "เปิดวิ่งเร็ว" or "ปิดวิ่งเร็ว",
+		isSpeed and "กดปุ่มเดิมเพื่อปิด" or "กลับความเร็วปกติ",
+		2,
+		isSpeed and "info" or "warning"
+	)
+end)
+
+movementTab:CreateLabel("SETTINGS")
+
 movementTab:CreateSlider("ความเร็วบิน", 10, 500, 100, function(value)
 	Movement.SetFlySpeed(value)
 end)
@@ -66,30 +92,6 @@ end, { Icon = "shield" })
 -- ⚙️ Tab: Settings (ใช้ Lucide icon "settings")
 -- ==========================================
 local settingsTab = MyWindow:CreateTab("Settings", "settings")
-
-settingsTab:CreateLabel("KEYBINDS")
-
-settingsTab:CreateKeybind("สลับโหมดบิน", Enum.KeyCode.F, function()
-	local isFlying = Movement.ToggleFly()
-	flyToggle:Set(isFlying)
-	DiqUI:Notify(
-		isFlying and "เปิดโหมดบิน" or "ปิดโหมดบิน",
-		isFlying and "กดปุ่มเดิมเพื่อปิด" or "กลับสู่โหมดปกติ",
-		2,
-		isFlying and "info" or "warning"
-	)
-end)
-
-settingsTab:CreateKeybind("สลับวิ่งเร็ว", Enum.KeyCode.G, function()
-	local isSpeed = Movement.ToggleSpeed()
-	speedToggle:Set(isSpeed)
-	DiqUI:Notify(
-		isSpeed and "เปิดวิ่งเร็ว" or "ปิดวิ่งเร็ว",
-		isSpeed and "กดปุ่มเดิมเพื่อปิด" or "กลับความเร็วปกติ",
-		2,
-		isSpeed and "info" or "warning"
-	)
-end)
 
 settingsTab:CreateLabel("PLAYER")
 
