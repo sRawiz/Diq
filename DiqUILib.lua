@@ -1,5 +1,5 @@
 -- ==========================================
--- 🎨 Diq UI Library v2.0
+-- 🎨 Diq UI Library v2.1
 -- ==========================================
 -- เขียนใหม่ทั้งหมดพร้อม:
 -- ✅ แก้ Memory Leak ทุกจุด (Connection Tracker)
@@ -12,6 +12,7 @@
 -- ✅ Theme Customization API
 -- ✅ Debounce ทุกปุ่ม
 -- ✅ Window:Destroy() cleanup
+-- ✅ Lucide Icons (DiqIcons) — ไม่ต้องใช้ Emoji อีกต่อไป
 
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
@@ -19,6 +20,7 @@ local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
 
 local Diq = {}
+local DiqIcons = nil -- จะโหลดทีหลังผ่าน Diq:LoadIcons()
 
 -- ==========================================
 -- 🎨 Default Theme (Zinc / Indigo)
@@ -117,6 +119,23 @@ local function ApplyPadding(obj, top, bottom, left, right)
 	p.PaddingRight = UDim.new(0, right or 0)
 	p.Parent = obj
 	return p
+end
+
+-- แปะ Lucide Icon เข้าไปใน Frame (คืน ImageLabel)
+-- ถ้าไม่มี DiqIcons หรือหา icon ไม่เจอ จะ return nil
+local function AttachIcon(iconName, parent, size, color, position)
+	if not DiqIcons or not iconName then return nil end
+	if not DiqIcons.Exists(iconName) then return nil end
+
+	size = size or 16
+	color = color or Theme.SubText
+	position = position or UDim2.new(0, 10, 0.5, -(size / 2))
+
+	local icon = DiqIcons.Create(iconName, parent, size, color)
+	if icon then
+		icon.Position = position
+	end
+	return icon
 end
 
 -- ลากหน้าต่างได้ (แก้ leak: ทุก connection ถูก track)
@@ -488,7 +507,7 @@ function Diq:CreateWindow(config)
 	-- ==========================================
 	function Window:CreateTab(tabName, tabIcon)
 		local Tab = {}
-		tabIcon = tabIcon or "📁"
+		tabIcon = tabIcon or "folder"
 
 		-- ปุ่มแท็บใน Sidebar
 		local tabBtn = Instance.new("TextButton")
@@ -510,12 +529,21 @@ function Diq:CreateWindow(config)
 		indicator.Parent = tabBtn
 		ApplyCorner(indicator, 2)
 
+		-- Tab Icon (Lucide) — ถ้ามี DiqIcons ใช้ ImageLabel, ถ้าไม่มีใช้ emoji
+		local hasLucideIcon = DiqIcons and DiqIcons.Exists(tabIcon)
+		local textOffset = 12 -- ตำแหน่งข้อความ
+
+		if hasLucideIcon then
+			AttachIcon(tabIcon, tabBtn, 14, Theme.SubText, UDim2.new(0, 10, 0.5, -7))
+			textOffset = 30 -- เลื่อนข้อความไปทางขวาเพื่อให้พ้น icon
+		end
+
 		-- ชื่อแท็บ
 		local btnLabel = Instance.new("TextLabel")
-		btnLabel.Size = UDim2.new(1, -15, 1, 0)
-		btnLabel.Position = UDim2.new(0, 12, 0, 0)
+		btnLabel.Size = UDim2.new(1, -(textOffset + 5), 1, 0)
+		btnLabel.Position = UDim2.new(0, textOffset, 0, 0)
 		btnLabel.BackgroundTransparency = 1
-		btnLabel.Text = tabIcon .. " " .. tabName
+		btnLabel.Text = hasLucideIcon and tabName or (tabIcon .. " " .. tabName)
 		btnLabel.TextColor3 = Theme.SubText
 		btnLabel.Font = Enum.Font.GothamMedium
 		btnLabel.TextSize = 12
@@ -616,9 +644,10 @@ function Diq:CreateWindow(config)
 		-- ======================================
 		-- 🔘 CreateButton — ปุ่มกด (มี debounce)
 		-- ======================================
-		function Tab:CreateButton(text, callback)
+		function Tab:CreateButton(text, callback, config)
 			local obj = {}
 			local debounce = false
+			config = config or {}
 
 			local frame = Instance.new("Frame")
 			frame.Size = UDim2.new(1, 0, 0, 36)
@@ -627,8 +656,13 @@ function Diq:CreateWindow(config)
 			ApplyCorner(frame, 8)
 			local stroke = ApplyStroke(frame, Theme.Outline)
 
+			-- Icon (ถ้ามี)
+			local hasIcon = config.Icon and AttachIcon(config.Icon, frame, 16, Theme.SubText, UDim2.new(0, 12, 0.5, -8))
+			local textPadLeft = hasIcon and 34 or 0
+
 			local btn = Instance.new("TextButton")
-			btn.Size = UDim2.new(1, 0, 1, 0)
+			btn.Size = UDim2.new(1, -textPadLeft, 1, 0)
+			btn.Position = UDim2.new(0, textPadLeft, 0, 0)
 			btn.BackgroundTransparency = 1
 			btn.Text = text
 			btn.TextColor3 = Theme.Text
@@ -671,9 +705,10 @@ function Diq:CreateWindow(config)
 		-- ======================================
 		-- 🔄 CreateToggle — สวิตช์เปิด/ปิด
 		-- ======================================
-		function Tab:CreateToggle(text, default, callback)
+		function Tab:CreateToggle(text, default, callback, config)
 			local obj = {}
 			local toggled = default or false
+			config = config or {}
 
 			local frame = Instance.new("Frame")
 			frame.Size = UDim2.new(1, 0, 0, 36)
@@ -682,9 +717,13 @@ function Diq:CreateWindow(config)
 			ApplyCorner(frame, 8)
 			ApplyStroke(frame, Theme.Outline)
 
+			-- Icon (ถ้ามี)
+			local hasIcon = config.Icon and AttachIcon(config.Icon, frame, 16, Theme.SubText, UDim2.new(0, 10, 0.5, -8))
+			local textPadLeft = hasIcon and 32 or 12
+
 			local lbl = Instance.new("TextLabel")
 			lbl.Size = UDim2.new(1, -60, 1, 0)
-			lbl.Position = UDim2.new(0, 12, 0, 0)
+			lbl.Position = UDim2.new(0, textPadLeft, 0, 0)
 			lbl.BackgroundTransparency = 1
 			lbl.Text = text
 			lbl.TextColor3 = Theme.Text
@@ -1217,6 +1256,12 @@ function Diq:CreateWindow(config)
 	end
 
 	return Window
+end
+
+-- โหลด DiqIcons module
+-- @param iconsModule table โมดูล DiqIcons ที่โหลดมาแล้ว
+function Diq:LoadIcons(iconsModule)
+	DiqIcons = iconsModule
 end
 
 return Diq

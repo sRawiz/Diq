@@ -141,6 +141,12 @@ function Movement.SetSpeed(enable)
 	UpdateRenderConnection()
 end
 
+-- สลับวิ่งเร็ว (toggle)
+function Movement.ToggleSpeed()
+	Movement.SetSpeed(not State.IsCFrameSpeed)
+	return State.IsCFrameSpeed
+end
+
 -- ตั้งค่าความเร็วบิน (ใช้กับ Slider)
 function Movement.SetFlySpeed(speed)
 	CONFIG.FlySpeed = speed
