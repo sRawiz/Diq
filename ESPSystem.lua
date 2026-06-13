@@ -142,7 +142,11 @@ local function UpdateESP()
                     cache.Name.Visible = Config.Names
                     if Config.Names then
                         local distance = math.floor((Camera.CFrame.Position - rootPart.Position).Magnitude)
-                        cache.Name.Text = string.format("%s [%d]", player.Name, distance)
+                        local hpText = ""
+                        if Config.Health then
+                            hpText = string.format(" [%d HP]", math.floor(humanoid.Health))
+                        end
+                        cache.Name.Text = string.format("%s [%dm]%s", player.Name, distance, hpText)
                         cache.Name.Position = Vector2.new(rootPos.X, headPos.Y - 20)
                         cache.Name.Color = color
                     end
