@@ -266,6 +266,15 @@ settingsTab:CreateDropdown("Teleport Mode", { "Instant", "Smooth", "CFrame" }, "
 	DiqUI:Notify("Mode Changed", "Current Mode: " .. selected, 2, "info")
 end)
 
+settingsTab:CreateLabel("UTILITY")
+
+settingsTab:CreateToggle("Anti-AFK (Prevent Idle Kick)", false, function(state)
+	Misc.SetAntiAFK(state)
+	if state then
+		DiqUI:Notify("Anti-AFK Enabled", "You will no longer be kicked for idling.", 3, "success")
+	end
+end, { Icon = "coffee" })
+
 settingsTab:CreateLabel("SERVER MANAGEMENT")
 
 settingsTab:CreateButton("Rejoin Server", function()

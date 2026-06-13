@@ -63,4 +63,28 @@ function MiscSystem.SetFullbright(enable)
     end
 end
 
+-- ==========================================
+-- Anti-AFK System (ป้องกันโดนเตะเมื่ออยู่นิ่งๆ 20 นาที)
+-- ==========================================
+local VirtualUser = game:GetService("VirtualUser")
+local antiAfkConnection = nil
+
+function MiscSystem.SetAntiAFK(enable)
+    if enable then
+        if not antiAfkConnection then
+            -- ดักจับจังหวะที่เกมเริ่มตรวจเจอว่าเราอยู่นิ่งๆ
+            antiAfkConnection = LocalPlayer.Idled:Connect(function()
+                -- จำลองการกดคลิกขวาแล้วปล่อย เพื่อรีเซ็ตเวลา 20 นาทีของเซิร์ฟเวอร์
+                VirtualUser:CaptureController()
+                VirtualUser:ClickButton2(Vector2.new())
+            end)
+        end
+    else
+        if antiAfkConnection then
+            antiAfkConnection:Disconnect()
+            antiAfkConnection = nil
+        end
+    end
+end
+
 return MiscSystem
