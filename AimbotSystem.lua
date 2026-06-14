@@ -260,12 +260,17 @@ local function OnRenderStepped(deltaTime)
 			local deltaX = screenPos.X - centerX
 			local deltaY = screenPos.Y - centerY
 			
-			-- FPS เกมต้องการ input แบบ relative 
-			-- factor สำหรับ Mouse ต้องเร็วกว่า Camera นิดหน่อยเพื่อให้รู้สึกคล้ายกัน
-			local mouseFactor = Config.Smoothing
+			-- FPS เกมต้องการ input แบบ relative
+			-- ใช้ Smoothness ควบคุมความเร็วโดยตรง (0.01 - 1.0)
+			-- ปรับจูนให้ 1.0 คือเมาส์สะบัดเข้าเป้าเร็วมาก (แต่ไม่เกินระยะห่าง)
+			local speedMultiplier = Config.Smoothing * 0.8
 			
-			local moveX = deltaX * mouseFactor
-			local moveY = deltaY * mouseFactor
+			local moveX = deltaX * speedMultiplier
+			local moveY = deltaY * speedMultiplier
+			
+			-- บังคับขยับขั้นต่ำ 1 พิกเซล ถ้าเป้ายังไม่ตรงเป๊ะ ป้องกันเมาส์ติด
+			if math.abs(deltaX) > 1 and math.abs(moveX) < 1 then moveX = deltaX > 0 and 1 or -1 end
+			if math.abs(deltaY) > 1 and math.abs(moveY) < 1 then moveY = deltaY > 0 and 1 or -1 end
 			
 			if type(mousemoverel) == "function" then
 				mousemoverel(moveX, moveY)
