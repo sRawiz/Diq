@@ -22,6 +22,7 @@ local DEFAULT_SMOOTHING = 0.5
 -- ==========================================
 local Config = {
 	Enabled = false,
+	AimMethod = "Camera", -- "Camera" หรือ "Mouse"
 	ShowFOV = false,
 	FOVRadius = DEFAULT_FOV_RADIUS,
 	FOVColor = Color3.fromRGB(255, 255, 255),
@@ -218,15 +219,35 @@ local function OnRenderStepped(deltaTime)
 	local camera = GetCamera()
 	if not camera then return end
 
-	local targetPos = CurrentTarget.Position
-	local camPos = camera.CFrame.Position
-	local newCFrame = CFrame.new(camPos, targetPos)
-
 	-- ✅ Frame-rate independent smoothing (exponential decay)
 	-- ไม่ว่า 60fps หรือ 240fps ความเร็วการเล็งจะเท่ากัน
 	local factor = 1 - math.exp(-Config.Smoothing * SMOOTHING_MULTIPLIER * deltaTime)
 	factor = math.clamp(factor, 0.001, 1)
-	camera.CFrame = camera.CFrame:Lerp(newCFrame, factor)
+
+	if Config.AimMethod == "Camera" then
+		-- เล็งด้วยการหมุน CFrame ของกล้องโดยตรง (ใช้ได้ดีในเกมทั่วไป)
+		local targetPos = CurrentTarget.Position
+		local camPos = camera.CFrame.Position
+		local newCFrame = CFrame.new(camPos, targetPos)
+		
+		camera.CFrame = camera.CFrame:Lerp(newCFrame, factor)
+	elseif Config.AimMethod == "Mouse" then
+		-- เล็งด้วยการจำลองการเลื่อนเมาส์ (ใช้แก้ปัญหาเกม FPS หนักๆ เช่น ENTRENCHED, Arsenal)
+		local screenPos, onScreen = camera:WorldToViewportPoint(CurrentTarget.Position)
+		if onScreen then
+			local mousePos = UserInputService:GetMouseLocation()
+			local deltaX = screenPos.X - mousePos.X
+			local deltaY = screenPos.Y - mousePos.Y
+			
+			local moveX = deltaX * factor
+			local moveY = deltaY * factor
+			
+			-- ป้องกัน error หาก executor ไม่มี mousemoverel (พวกโทรศัพท์หรือ executor เก่าๆ)
+			if type(mousemoverel) == "function" then
+				mousemoverel(moveX, moveY)
+			end
+		end
+	end
 end
 
 -- ==========================================
@@ -270,6 +291,12 @@ function AimbotSystem.SetEnabled(state)
 	end
 end
 
+function AimbotSystem.SetAimMethod(method)
+	if method == "Camera" or method == "Mouse" then
+		Config.AimMethod = method
+	end
+end
+
 function AimbotSystem.SetShowFOV(state) Config.ShowFOV = state end
 function AimbotSystem.SetFOVRadius(val) Config.FOVRadius = val end
 function AimbotSystem.SetFOVColor(color) Config.FOVColor = color end
@@ -282,6 +309,7 @@ function AimbotSystem.SetTeamCheck(state) Config.TeamCheck = state end
 -- Public API — Getters
 -- ==========================================
 function AimbotSystem.IsEnabled() return Config.Enabled end
+function AimbotSystem.GetAimMethod() return Config.AimMethod end
 function AimbotSystem.GetShowFOV() return Config.ShowFOV end
 function AimbotSystem.GetFOVRadius() return Config.FOVRadius end
 function AimbotSystem.GetFOVColor() return Config.FOVColor end

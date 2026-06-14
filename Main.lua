@@ -208,6 +208,10 @@ combatTab:CreateDropdown("Aim Part", { "Head", "Torso", "HumanoidRootPart" }, "H
 	Aimbot.SetAimPart(selected)
 end)
 
+combatTab:CreateDropdown("Aim Method (FPS Game)", { "Camera", "Mouse" }, "Camera", function(selected)
+	Aimbot.SetAimMethod(selected)
+end)
+
 combatTab:CreateLabel("HITBOX EXPANDER")
 
 combatTab:CreateToggle("Enable Hitbox Expander", false, function(state)
