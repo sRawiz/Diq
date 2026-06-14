@@ -289,7 +289,10 @@ local function Initialize()
 	-- เชื่อมต่อ events และเก็บ connection ไว้
 	Connections.InputBegan = UserInputService.InputBegan:Connect(OnInputBegan)
 	Connections.InputEnded = UserInputService.InputEnded:Connect(OnInputEnded)
-	Connections.RenderStepped = RunService.RenderStepped:Connect(OnRenderStepped)
+	
+	-- ใช้ BindToRenderStep แทน Connect เพื่อรัน "หลัง" จากที่สคริปต์กล้องของเกมทำงานเสร็จ (priority 205)
+	-- ทำให้โหมด Camera สามารถสู้กับระบบล็อคกล้องของเกม FPS ได้
+	RunService:BindToRenderStep("DiqAimbot", Enum.RenderPriority.Camera.Value + 5, OnRenderStepped)
 end
 
 --- ทำลายทุกอย่าง ป้องกัน leak เมื่อ execute ซ้ำ
@@ -301,6 +304,11 @@ function AimbotSystem.Destroy()
 		end
 	end
 	table.clear(Connections)
+	
+	-- ยกเลิก BindToRenderStep
+	pcall(function()
+		RunService:UnbindFromRenderStep("DiqAimbot")
+	end)
 
 	-- ลบ FOV Circle
 	DestroyFOVCircle()
