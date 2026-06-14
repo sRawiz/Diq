@@ -235,14 +235,22 @@ local function OnRenderStepped(deltaTime)
 		-- เล็งด้วยการจำลองการเลื่อนเมาส์ (ใช้แก้ปัญหาเกม FPS หนักๆ เช่น ENTRENCHED, Arsenal)
 		local screenPos, onScreen = camera:WorldToViewportPoint(CurrentTarget.Position)
 		if onScreen then
-			local mousePos = UserInputService:GetMouseLocation()
-			local deltaX = screenPos.X - mousePos.X
-			local deltaY = screenPos.Y - mousePos.Y
+			-- เอาพิกัดของจุดกึ่งกลางจอภาพ (เป้าปืน) แทนที่จะใช้ MouseLocation
+			-- เกม FPS ขยับกล้องจากเป้ากลางจอเสมอ
+			local viewportSize = camera.ViewportSize
+			local centerX = viewportSize.X / 2
+			local centerY = viewportSize.Y / 2
 			
-			local moveX = deltaX * factor
-			local moveY = deltaY * factor
+			local deltaX = screenPos.X - centerX
+			local deltaY = screenPos.Y - centerY
 			
-			-- ป้องกัน error หาก executor ไม่มี mousemoverel (พวกโทรศัพท์หรือ executor เก่าๆ)
+			-- FPS เกมต้องการ input แบบ relative 
+			-- factor สำหรับ Mouse ต้องเร็วกว่า Camera นิดหน่อยเพื่อให้รู้สึกคล้ายกัน
+			local mouseFactor = Config.Smoothing
+			
+			local moveX = deltaX * mouseFactor
+			local moveY = deltaY * mouseFactor
+			
 			if type(mousemoverel) == "function" then
 				mousemoverel(moveX, moveY)
 			end
