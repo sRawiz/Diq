@@ -97,8 +97,16 @@ local function IsTargetValid(targetPart)
 	local screenPos, onScreen = camera:WorldToViewportPoint(targetPart.Position)
 	if not onScreen then return false end
 
-	local mousePos = UserInputService:GetMouseLocation()
-	local distance = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
+	-- ใช้จุดกึ่งกลางจอถ้าเป็นโหมดเมาส์, ใช้พิกัดเมาส์ถ้าเป็นโหมดกล้อง
+	local centerPos
+	if Config.AimMethod == "Mouse" then
+		local viewportSize = camera.ViewportSize
+		centerPos = Vector2.new(viewportSize.X / 2, viewportSize.Y / 2)
+	else
+		centerPos = UserInputService:GetMouseLocation()
+	end
+
+	local distance = (Vector2.new(screenPos.X, screenPos.Y) - centerPos).Magnitude
 	if distance > Config.FOVRadius then return false end
 
 	-- ตรวจ WallCheck
@@ -112,7 +120,15 @@ local function GetClosestTarget()
 	local camera = GetCamera()
 	if not camera then return nil end
 
-	local mousePos = UserInputService:GetMouseLocation()
+	-- ใช้จุดกึ่งกลางจอถ้าเป็นโหมดเมาส์, ใช้พิกัดเมาส์ถ้าเป็นโหมดกล้อง
+	local centerPos
+	if Config.AimMethod == "Mouse" then
+		local viewportSize = camera.ViewportSize
+		centerPos = Vector2.new(viewportSize.X / 2, viewportSize.Y / 2)
+	else
+		centerPos = UserInputService:GetMouseLocation()
+	end
+
 	local closestTarget = nil
 	local shortestDistance = Config.FOVRadius
 
@@ -137,7 +153,7 @@ local function GetClosestTarget()
 		local screenPos, onScreen = camera:WorldToViewportPoint(targetPart.Position)
 		if not onScreen then continue end
 
-		local distance = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
+		local distance = (Vector2.new(screenPos.X, screenPos.Y) - centerPos).Magnitude
 
 		if distance < shortestDistance and IsVisible(targetPart) then
 			shortestDistance = distance

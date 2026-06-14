@@ -73,7 +73,9 @@ local function RevertPlayer(player)
 		if part then
 			part.Size = props.Size
 			part.Transparency = props.Transparency
-			part.CanCollide = props.CanCollide
+			if props.CanCollide ~= nil then
+				part.CanCollide = props.CanCollide
+			end
 		end
 	end
 end
@@ -110,6 +112,9 @@ local function OnStepped()
 
 		local targetPart = char:FindFirstChild(Config.TargetPart)
 		if not targetPart then continue end
+		
+		-- บังคับว่าต้องมี RootPart ด้วยเพื่อเมคชัวร์ว่าตัวโหลดเสร็จแล้ว
+		if not char:FindFirstChild("HumanoidRootPart") then continue end
 
 		targetPart.Size = Vector3.new(Config.Size, Config.Size, Config.Size)
 		targetPart.Transparency = Config.Transparency
@@ -118,12 +123,12 @@ local function OnStepped()
 end
 
 local function HandleCharacterAdded(player)
-	player.CharacterAdded:Connect(function()
-		task.wait(CHARACTER_LOAD_DELAY)
-		local char = player.Character
-		if char then
-			OriginalProperties[player] = SaveOriginal(char)
-		end
+	player.CharacterAdded:Connect(function(char)
+		task.delay(CHARACTER_LOAD_DELAY, function()
+			if player.Character == char and char:FindFirstChild("HumanoidRootPart") and char:FindFirstChild("Head") then
+				OriginalProperties[player] = SaveOriginal(char)
+			end
+		end)
 	end)
 end
 

@@ -248,13 +248,15 @@ local function UpdateESP()
 		local rootPos, onScreen = camera:WorldToViewportPoint(rootPart.Position)
 		local head = character:FindFirstChild("Head")
 
-		if not onScreen or not head then
+		-- ✅ Fallback if Head is missing (ENTRENCHED and some FPS games don't have Head initially)
+		local headWorldPos = head and head.Position or (rootPart.Position + Vector3.new(0, 1.5, 0))
+		local headPos = camera:WorldToViewportPoint(headWorldPos + Vector3.new(0, 0.5, 0))
+		local legPos = camera:WorldToViewportPoint(rootPart.Position - Vector3.new(0, 3, 0))
+
+		if not onScreen then
 			HideAllDrawings(cache)
 			continue
 		end
-
-		local headPos = camera:WorldToViewportPoint(head.Position + Vector3.new(0, 0.5, 0))
-		local legPos = camera:WorldToViewportPoint(rootPart.Position - Vector3.new(0, 3, 0))
 
 		local height = math.abs(headPos.Y - legPos.Y)
 		local width = height / 2
