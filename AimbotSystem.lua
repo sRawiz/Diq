@@ -1,146 +1,309 @@
 local AimbotSystem = {}
 
+-- ==========================================
+-- Services
+-- ==========================================
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
-local Camera = workspace.CurrentCamera
 local LocalPlayer = Players.LocalPlayer
 
+-- ==========================================
+-- Constants
+-- ==========================================
+local FOV_CIRCLE_SIDES = 60
+local FOV_CIRCLE_ZINDEX = 999
+local SMOOTHING_MULTIPLIER = 10 -- ตัวคูณสำหรับ exponential smoothing
+local DEFAULT_FOV_RADIUS = 150
+local DEFAULT_SMOOTHING = 0.5
+
+-- ==========================================
+-- Config
+-- ==========================================
 local Config = {
-    Enabled = false,
-    ShowFOV = false,
-    FOVRadius = 150,
-    Smoothing = 0.5, -- 0.01 (Slow) to 1.0 (Instant)
-    AimPart = "Head",
-    WallCheck = false,
-    TeamCheck = true,
+	Enabled = false,
+	ShowFOV = false,
+	FOVRadius = DEFAULT_FOV_RADIUS,
+	FOVColor = Color3.fromRGB(255, 255, 255),
+	Smoothing = DEFAULT_SMOOTHING, -- 0.01 (Slow) to 1.0 (Instant)
+	AimPart = "Head",
+	WallCheck = false,
+	TeamCheck = true,
 }
 
-local FOVCircle
-pcall(function()
-    FOVCircle = Drawing.new("Circle")
-    FOVCircle.Thickness = 1
-    FOVCircle.NumSides = 60
-    FOVCircle.Radius = Config.FOVRadius
-    FOVCircle.Filled = false
-    FOVCircle.Visible = false
-    FOVCircle.ZIndex = 999
-    FOVCircle.Transparency = 1
-    FOVCircle.Color = Color3.fromRGB(255, 255, 255)
-end)
-
+-- ==========================================
+-- State
+-- ==========================================
 local IsAiming = false
-local CurrentTarget = nil
+local CurrentTarget = nil -- locked target (Part reference)
+local FOVCircle = nil
+local Connections = {} -- เก็บ connections ทั้งหมดเพื่อ cleanup
 
--- Listen for Aim button (Right Click)
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if not gameProcessed and input.UserInputType == Enum.UserInputType.MouseButton2 then
-        IsAiming = true
-    end
-end)
+-- ==========================================
+-- Helpers
+-- ==========================================
 
-UserInputService.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton2 then
-        IsAiming = false
-        CurrentTarget = nil
-    end
-end)
+--- ดึง CurrentCamera สดทุกครั้ง ป้องกันกรณี camera เปลี่ยน (cutscene, respawn)
+local function GetCamera()
+	return workspace.CurrentCamera
+end
 
--- Check if part is visible (WallCheck)
+--- ตรวจสอบว่า Part ยังมองเห็นได้ (ไม่โดนกำแพงบัง)
 local function IsVisible(targetPart)
-    if not Config.WallCheck then return true end
-    local character = LocalPlayer.Character
-    if not character then return false end
-    
-    local rayOrigin = Camera.CFrame.Position
-    local rayDirection = (targetPart.Position - rayOrigin).Unit * (targetPart.Position - rayOrigin).Magnitude
-    
-    local raycastParams = RaycastParams.new()
-    raycastParams.FilterDescendantsInstances = {character}
-    raycastParams.FilterType = Enum.RaycastFilterType.Exclude
-    raycastParams.IgnoreWater = true
-    
-    local result = workspace:Raycast(rayOrigin, rayDirection, raycastParams)
-    
-    -- If it hit something, and that something is NOT part of the target's character, it's behind a wall
-    if result and result.Instance and not result.Instance:IsDescendantOf(targetPart.Parent) then
-        return false
-    end
-    return true
+	if not Config.WallCheck then return true end
+
+	local character = LocalPlayer.Character
+	if not character then return false end
+
+	local camera = GetCamera()
+	if not camera then return false end
+
+	local rayOrigin = camera.CFrame.Position
+	local rayDirection = targetPart.Position - rayOrigin -- ✅ ไม่ต้อง .Unit * .Magnitude
+
+	local raycastParams = RaycastParams.new()
+	raycastParams.FilterDescendantsInstances = {character}
+	raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+	raycastParams.IgnoreWater = true
+
+	local result = workspace:Raycast(rayOrigin, rayDirection, raycastParams)
+
+	if result and result.Instance then
+		-- ถ้าชนอะไรที่ไม่ใช่ตัวของเป้าหมาย = โดนกำแพงบัง
+		return result.Instance:IsDescendantOf(targetPart.Parent)
+	end
+
+	return true
 end
 
--- Find closest target to mouse inside FOV
+--- ตรวจสอบว่า target ปัจจุบันยังใช้ได้อยู่ไหม (ยังมีชีวิต, ยังอยู่ใน FOV, ยังมองเห็น)
+local function IsTargetValid(targetPart)
+	if not targetPart then return false end
+	if not targetPart.Parent then return false end
+
+	-- ตรวจว่า character ยังอยู่
+	local character = targetPart.Parent
+	if not character:IsDescendantOf(workspace) then return false end
+
+	-- ตรวจว่ายังมีชีวิต
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if not humanoid or humanoid.Health <= 0 then return false end
+
+	-- ตรวจว่ายังอยู่บนหน้าจอและอยู่ใน FOV
+	local camera = GetCamera()
+	if not camera then return false end
+
+	local screenPos, onScreen = camera:WorldToViewportPoint(targetPart.Position)
+	if not onScreen then return false end
+
+	local mousePos = UserInputService:GetMouseLocation()
+	local distance = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
+	if distance > Config.FOVRadius then return false end
+
+	-- ตรวจ WallCheck
+	if not IsVisible(targetPart) then return false end
+
+	return true
+end
+
+--- หาเป้าหมายที่ใกล้เคอร์เซอร์ที่สุดภายใน FOV
 local function GetClosestTarget()
-    local mousePos = UserInputService:GetMouseLocation()
-    local closestTarget = nil
-    local shortestDistance = Config.FOVRadius
+	local camera = GetCamera()
+	if not camera then return nil end
 
-    for _, player in ipairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer then
-            -- Team Check (Skip if teammate, UNLESS they are Neutral/FFA)
-            if Config.TeamCheck then
-                if player.Team and player.Team == LocalPlayer.Team and not player.Neutral then
-                    continue
-                end
-            end
-            
-            local char = player.Character
-            if char then
-                local humanoid = char:FindFirstChildOfClass("Humanoid")
-                local targetPart = char:FindFirstChild(Config.AimPart) or char:FindFirstChild("HumanoidRootPart")
-                
-                if humanoid and humanoid.Health > 0 and targetPart then
-                    local screenPos, onScreen = Camera:WorldToViewportPoint(targetPart.Position)
-                    
-                    if onScreen then
-                        local distance = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
-                        
-                        if distance < shortestDistance and IsVisible(targetPart) then
-                            shortestDistance = distance
-                            closestTarget = targetPart
-                        end
-                    end
-                end
-            end
-        end
-    end
-    return closestTarget
+	local mousePos = UserInputService:GetMouseLocation()
+	local closestTarget = nil
+	local shortestDistance = Config.FOVRadius
+
+	for _, player in Players:GetPlayers() do -- ✅ Luau generalized iteration
+		if player == LocalPlayer then continue end
+
+		-- Team Check
+		if Config.TeamCheck then
+			if player.Team and player.Team == LocalPlayer.Team and not player.Neutral then
+				continue
+			end
+		end
+
+		local char = player.Character
+		if not char then continue end
+
+		local humanoid = char:FindFirstChildOfClass("Humanoid")
+		local targetPart = char:FindFirstChild(Config.AimPart) or char:FindFirstChild("HumanoidRootPart")
+
+		if not humanoid or humanoid.Health <= 0 or not targetPart then continue end
+
+		local screenPos, onScreen = camera:WorldToViewportPoint(targetPart.Position)
+		if not onScreen then continue end
+
+		local distance = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
+
+		if distance < shortestDistance and IsVisible(targetPart) then
+			shortestDistance = distance
+			closestTarget = targetPart
+		end
+	end
+
+	return closestTarget
 end
 
--- Main Loop
-RunService.RenderStepped:Connect(function()
-    -- Update FOV Circle
-    if FOVCircle then
-        FOVCircle.Radius = Config.FOVRadius
-        FOVCircle.Visible = Config.ShowFOV and Config.Enabled
-        if Config.ShowFOV then
-            FOVCircle.Position = UserInputService:GetMouseLocation()
-        end
-    end
+-- ==========================================
+-- FOV Circle (Drawing API)
+-- ==========================================
+local function CreateFOVCircle()
+	local circle = nil
+	pcall(function()
+		circle = Drawing.new("Circle")
+		circle.Thickness = 1
+		circle.NumSides = FOV_CIRCLE_SIDES
+		circle.Radius = Config.FOVRadius
+		circle.Filled = false
+		circle.Visible = false
+		circle.ZIndex = FOV_CIRCLE_ZINDEX
+		circle.Transparency = 1
+		circle.Color = Config.FOVColor
+	end)
+	return circle
+end
 
-    -- Aiming Logic
-    if Config.Enabled and IsAiming then
-        CurrentTarget = GetClosestTarget()
-        
-        if CurrentTarget then
-            local targetPos = CurrentTarget.Position
-            local camPos = Camera.CFrame.Position
-            local newCFrame = CFrame.new(camPos, targetPos)
-            
-            -- Smoothing formula: Camera.CFrame = Camera.CFrame:Lerp(goal, speed)
-            local lerpSpeed = math.clamp(Config.Smoothing, 0.01, 1)
-            Camera.CFrame = Camera.CFrame:Lerp(newCFrame, lerpSpeed)
-        end
-    end
-end)
+local function DestroyFOVCircle()
+	if FOVCircle then
+		pcall(function()
+			FOVCircle:Remove()
+		end)
+		FOVCircle = nil
+	end
+end
 
--- API
-function AimbotSystem.SetEnabled(state) Config.Enabled = state end
+-- ==========================================
+-- Input Handling
+-- ==========================================
+local function OnInputBegan(input, gameProcessed)
+	if not gameProcessed and input.UserInputType == Enum.UserInputType.MouseButton2 then
+		IsAiming = true
+	end
+end
+
+local function OnInputEnded(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton2 then
+		IsAiming = false
+		CurrentTarget = nil -- ปล่อย lock เมื่อปล่อยคลิก
+	end
+end
+
+-- ==========================================
+-- Main Render Loop
+-- ==========================================
+local function OnRenderStepped(deltaTime)
+	-- อัพเดท FOV Circle
+	if FOVCircle then
+		FOVCircle.Radius = Config.FOVRadius
+		FOVCircle.Color = Config.FOVColor
+		FOVCircle.Visible = Config.ShowFOV and Config.Enabled
+		if Config.ShowFOV then
+			FOVCircle.Position = UserInputService:GetMouseLocation()
+		end
+	end
+
+	-- Aiming Logic
+	if not Config.Enabled or not IsAiming then return end
+
+	-- ✅ Target Locking: หา target ใหม่เฉพาะเมื่อ target เก่าหลุด
+	if not IsTargetValid(CurrentTarget) then
+		CurrentTarget = GetClosestTarget()
+	end
+
+	if not CurrentTarget then return end
+
+	local camera = GetCamera()
+	if not camera then return end
+
+	local targetPos = CurrentTarget.Position
+	local camPos = camera.CFrame.Position
+	local newCFrame = CFrame.new(camPos, targetPos)
+
+	-- ✅ Frame-rate independent smoothing (exponential decay)
+	-- ไม่ว่า 60fps หรือ 240fps ความเร็วการเล็งจะเท่ากัน
+	local factor = 1 - math.exp(-Config.Smoothing * SMOOTHING_MULTIPLIER * deltaTime)
+	factor = math.clamp(factor, 0.001, 1)
+	camera.CFrame = camera.CFrame:Lerp(newCFrame, factor)
+end
+
+-- ==========================================
+-- Initialize / Destroy
+-- ==========================================
+local function Initialize()
+	-- สร้าง FOV Circle
+	FOVCircle = CreateFOVCircle()
+
+	-- เชื่อมต่อ events และเก็บ connection ไว้
+	Connections.InputBegan = UserInputService.InputBegan:Connect(OnInputBegan)
+	Connections.InputEnded = UserInputService.InputEnded:Connect(OnInputEnded)
+	Connections.RenderStepped = RunService.RenderStepped:Connect(OnRenderStepped)
+end
+
+--- ทำลายทุกอย่าง ป้องกัน leak เมื่อ execute ซ้ำ
+function AimbotSystem.Destroy()
+	-- Disconnect ทุก connection
+	for name, connection in Connections do
+		if connection and connection.Connected then
+			connection:Disconnect()
+		end
+	end
+	table.clear(Connections)
+
+	-- ลบ FOV Circle
+	DestroyFOVCircle()
+
+	-- Reset state
+	IsAiming = false
+	CurrentTarget = nil
+end
+
+-- ==========================================
+-- Public API — Setters
+-- ==========================================
+function AimbotSystem.SetEnabled(state)
+	Config.Enabled = state
+	if not state then
+		CurrentTarget = nil -- ปล่อย lock เมื่อปิด
+	end
+end
+
 function AimbotSystem.SetShowFOV(state) Config.ShowFOV = state end
 function AimbotSystem.SetFOVRadius(val) Config.FOVRadius = val end
-function AimbotSystem.SetSmoothing(val) Config.Smoothing = val end
+function AimbotSystem.SetFOVColor(color) Config.FOVColor = color end
+function AimbotSystem.SetSmoothing(val) Config.Smoothing = math.clamp(val, 0.01, 1) end
 function AimbotSystem.SetAimPart(part) Config.AimPart = part end
 function AimbotSystem.SetWallCheck(state) Config.WallCheck = state end
 function AimbotSystem.SetTeamCheck(state) Config.TeamCheck = state end
+
+-- ==========================================
+-- Public API — Getters
+-- ==========================================
+function AimbotSystem.IsEnabled() return Config.Enabled end
+function AimbotSystem.GetShowFOV() return Config.ShowFOV end
+function AimbotSystem.GetFOVRadius() return Config.FOVRadius end
+function AimbotSystem.GetFOVColor() return Config.FOVColor end
+function AimbotSystem.GetSmoothing() return Config.Smoothing end
+function AimbotSystem.GetAimPart() return Config.AimPart end
+function AimbotSystem.GetWallCheck() return Config.WallCheck end
+function AimbotSystem.GetTeamCheck() return Config.TeamCheck end
+function AimbotSystem.IsAiming() return IsAiming end
+function AimbotSystem.GetCurrentTarget() return CurrentTarget end
+
+--- คืน Config ทั้งก้อน (read-only copy)
+function AimbotSystem.GetConfig()
+	local copy = {}
+	for k, v in Config do
+		copy[k] = v
+	end
+	return copy
+end
+
+-- ==========================================
+-- Boot
+-- ==========================================
+Initialize()
 
 return AimbotSystem

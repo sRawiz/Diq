@@ -1,5 +1,5 @@
 -- ==========================================
--- 🎨 Diq UI Library v2.1
+-- 🎨 Diq UI Library v3.0 (Refactored)
 -- ==========================================
 -- เขียนใหม่ทั้งหมดพร้อม:
 -- ✅ แก้ Memory Leak ทุกจุด (Connection Tracker)
@@ -121,6 +121,28 @@ local function ApplyPadding(obj, top, bottom, left, right)
 	return p
 end
 
+-- Section Style Helper — ลดโค้ดซ้ำจาก 4 components เหลือ 1 function
+local function ApplySectionStyle(frame, sectionRef)
+	local isSection = sectionRef and sectionRef._isSection
+	if isSection then
+		frame.BackgroundTransparency = 1
+		if sectionRef._itemCount and sectionRef._itemCount > 0 then
+			local sep = Instance.new("Frame")
+			sep.Size = UDim2.new(1, -24, 0, 1)
+			sep.Position = UDim2.new(0, 12, 0, 0)
+			sep.BackgroundColor3 = Theme.Outline
+			sep.BorderSizePixel = 0
+			sep.BackgroundTransparency = 0.5
+			sep.Parent = frame
+		end
+		if sectionRef._itemCount then sectionRef._itemCount = sectionRef._itemCount + 1 end
+		return nil, true -- stroke=nil, isSection=true
+	else
+		ApplyCorner(frame, 8)
+		return ApplyStroke(frame, Theme.Outline), false
+	end
+end
+
 -- แปะ Lucide Icon เข้าไปใน Frame (คืน ImageLabel)
 -- ถ้าไม่มี DiqIcons หรือหา icon ไม่เจอ จะ return nil
 local function AttachIcon(iconName, parent, size, color, position)
@@ -208,7 +230,7 @@ function Diq:Notify(title, message, duration, notifType)
 	elseif notifType == "error" then accentColor = Theme.Error end
 
 	-- จำกัดจำนวนแจ้งเตือน (ให้แสดงแค่อันเดียว ลบของเก่าทิ้งทั้งหมด)
-	for _, child in ipairs(NotificationHolder:GetChildren()) do
+	for _, child in NotificationHolder:GetChildren() do
 		if child:IsA("Frame") then
 			child:Destroy()
 		end
@@ -673,7 +695,7 @@ function Diq:CreateWindow(config)
 		function Tab:CreateProfileCard(playerName, executorName, userId)
 			local obj = {}
 			local targetParent = (self and self._content) or content
-			local sessionStart = tick()
+			local sessionStart = os.clock()
 
 			local frame = Instance.new("Frame")
 			frame.Size = UDim2.new(1, 0, 0, 92)
@@ -755,7 +777,7 @@ function Diq:CreateWindow(config)
 			task.spawn(function()
 				while task.wait(1) do
 					if not frame.Parent then break end -- กัน Memory Leak ถ้า UI โดนลบ
-					local elapsed = tick() - sessionStart
+					local elapsed = os.clock() - sessionStart
 					local hrs = math.floor(elapsed / 3600)
 					local mins = math.floor((elapsed % 3600) / 60)
 					local secs = math.floor(elapsed % 60)
@@ -835,25 +857,7 @@ function Diq:CreateWindow(config)
 			frame.Text = ""
 			frame.Parent = targetParent
 			
-			local isSection = self and self._isSection
-			local stroke
-			
-			if isSection then
-				frame.BackgroundTransparency = 1
-				if self._itemCount and self._itemCount > 0 then
-					local sep = Instance.new("Frame")
-					sep.Size = UDim2.new(1, -24, 0, 1)
-					sep.Position = UDim2.new(0, 12, 0, 0)
-					sep.BackgroundColor3 = Theme.Outline
-					sep.BorderSizePixel = 0
-					sep.BackgroundTransparency = 0.5
-					sep.Parent = frame
-				end
-				if self._itemCount then self._itemCount = self._itemCount + 1 end
-			else
-				ApplyCorner(frame, 8)
-				stroke = ApplyStroke(frame, Theme.Outline)
-			end
+			local stroke, isSection = ApplySectionStyle(frame, self)
 
 			-- Icon (ถ้ามี)
 			local hasIcon = config.Icon and AttachIcon(config.Icon, frame, 16, Theme.SubText, UDim2.new(0, 12, 0.5, -8))
@@ -924,24 +928,7 @@ function Diq:CreateWindow(config)
 			frame.BackgroundColor3 = Theme.ElementBg
 			frame.Parent = content
 
-			local isSection = self and self._isSection
-			
-			if isSection then
-				frame.BackgroundTransparency = 1
-				if self._itemCount and self._itemCount > 0 then
-					local sep = Instance.new("Frame")
-					sep.Size = UDim2.new(1, -24, 0, 1)
-					sep.Position = UDim2.new(0, 12, 0, 0)
-					sep.BackgroundColor3 = Theme.Outline
-					sep.BorderSizePixel = 0
-					sep.BackgroundTransparency = 0.5
-					sep.Parent = frame
-				end
-				if self._itemCount then self._itemCount = self._itemCount + 1 end
-			else
-				ApplyCorner(frame, 8)
-				ApplyStroke(frame, Theme.Outline)
-			end
+			ApplySectionStyle(frame, self)
 
 			-- Top area
 			local topArea = Instance.new("Frame")
@@ -1136,6 +1123,17 @@ function Diq:CreateWindow(config)
 						sliding = false
 					end
 				end))
+
+				-- ✅ Fix: เพิ่ม drag support (เดิมขาดไป ทำให้ลากไม่ได้)
+				connections:Track(UserInputService.InputChanged:Connect(function(input)
+					if sliding and (input.UserInputType == Enum.UserInputType.MouseMovement
+						or input.UserInputType == Enum.UserInputType.Touch) then
+						local ratio = math.clamp(
+							(input.Position.X - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1
+						)
+						UpdateSlider(sMin + (sMax - sMin) * ratio)
+					end
+				end))
 			end
 
 			connections:Track(btn.MouseButton1Click:Connect(function()
@@ -1169,24 +1167,7 @@ function Diq:CreateWindow(config)
 			frame.BackgroundColor3 = Theme.ElementBg
 			frame.Parent = targetParent
 
-			local isSection = self and self._isSection
-			
-			if isSection then
-				frame.BackgroundTransparency = 1
-				if self._itemCount and self._itemCount > 0 then
-					local sep = Instance.new("Frame")
-					sep.Size = UDim2.new(1, -24, 0, 1)
-					sep.Position = UDim2.new(0, 12, 0, 0)
-					sep.BackgroundColor3 = Theme.Outline
-					sep.BorderSizePixel = 0
-					sep.BackgroundTransparency = 0.5
-					sep.Parent = frame
-				end
-				if self._itemCount then self._itemCount = self._itemCount + 1 end
-			else
-				ApplyCorner(frame, 8)
-				ApplyStroke(frame, Theme.Outline)
-			end
+			ApplySectionStyle(frame, self)
 
 			local lbl = Instance.new("TextLabel")
 			lbl.Size = UDim2.new(1, -55, 0, 20)
@@ -1558,24 +1539,7 @@ function Diq:CreateWindow(config)
 			frame.BackgroundColor3 = Theme.ElementBg
 			frame.Parent = targetParent
 
-			local isSection = self and self._isSection
-			
-			if isSection then
-				frame.BackgroundTransparency = 1
-				if self._itemCount and self._itemCount > 0 then
-					local sep = Instance.new("Frame")
-					sep.Size = UDim2.new(1, -24, 0, 1)
-					sep.Position = UDim2.new(0, 12, 0, 0)
-					sep.BackgroundColor3 = Theme.Outline
-					sep.BorderSizePixel = 0
-					sep.BackgroundTransparency = 0.5
-					sep.Parent = frame
-				end
-				if self._itemCount then self._itemCount = self._itemCount + 1 end
-			else
-				ApplyCorner(frame, 8)
-				ApplyStroke(frame, Theme.Outline)
-			end
+			ApplySectionStyle(frame, self)
 
 			local lbl = Instance.new("TextLabel")
 			lbl.Size = UDim2.new(1, -95, 1, 0)
@@ -1716,6 +1680,18 @@ end
 -- @param iconsModule table โมดูล DiqIcons ที่โหลดมาแล้ว
 function Diq:LoadIcons(iconsModule)
 	DiqIcons = iconsModule
+end
+
+--- ทำลาย module ระดับบน (NotificationHolder, active tracker)
+function Diq:Destroy()
+	if _activeTracker then
+		_activeTracker:DisconnectAll()
+		_activeTracker = nil
+	end
+	if NotificationHolder and NotificationHolder.Parent then
+		NotificationHolder:Destroy()
+		NotificationHolder = nil
+	end
 end
 
 return Diq

@@ -1,90 +1,170 @@
 local MiscSystem = {}
 
-local HttpService = game:GetService("HttpService")
+-- ==========================================
+-- Services
+-- ==========================================
 local TeleportService = game:GetService("TeleportService")
 local Players = game:GetService("Players")
-local LocalPlayer = Players.LocalPlayer
-
--- Rejoin Server (เข้าเซิร์ฟเวอร์เดิม)
-function MiscSystem.Rejoin()
-    -- ถ้านี่เป็นเซิร์ฟเวอร์ส่วนตัวหรือเซิร์ฟที่ไม่มีคนอื่น การออกอาจจะทำให้เซิร์ฟปิดตัวได้
-    if #Players:GetPlayers() <= 1 then
-        LocalPlayer:Kick("\nRejoining...\n(Please wait...)")
-        task.wait()
-        TeleportService:Teleport(game.PlaceId, LocalPlayer)
-    else
-        TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer)
-    end
-end
-
 local Lighting = game:GetService("Lighting")
 local RunService = game:GetService("RunService")
-local fullbrightConnection = nil
+local LocalPlayer = Players.LocalPlayer
 
-local originalLighting = {}
+-- ==========================================
+-- Constants
+-- ==========================================
+local FULLBRIGHT_AMBIENT = Color3.new(1, 1, 1)
+local FULLBRIGHT_BRIGHTNESS = 2
+local FULLBRIGHT_FOG_END = 9e9
 
--- ปรับสว่าง 100% และลบหมอก (Fullbright & No Fog)
-function MiscSystem.SetFullbright(enable)
-    if enable then
-        if not fullbrightConnection then
-            -- เก็บค่าแสงสว่างดั้งเดิมเอาไว้ก่อน
-            originalLighting.Ambient = Lighting.Ambient
-            originalLighting.ColorShift_Bottom = Lighting.ColorShift_Bottom
-            originalLighting.ColorShift_Top = Lighting.ColorShift_Top
-            originalLighting.GlobalShadows = Lighting.GlobalShadows
-            originalLighting.FogEnd = Lighting.FogEnd
-            originalLighting.Brightness = Lighting.Brightness
+-- ==========================================
+-- State
+-- ==========================================
+local Connections = {}
+local OriginalLighting = {}
+local State = {
+	IsFullbright = false,
+	IsAntiAFK = false,
+}
 
-            -- บังคับเปลี่ยนค่าแสงทุกเฟรม (ป้องกันเกมเปลี่ยนกลับ)
-            fullbrightConnection = RunService.RenderStepped:Connect(function()
-                Lighting.Ambient = Color3.new(1, 1, 1)
-                Lighting.ColorShift_Bottom = Color3.new(1, 1, 1)
-                Lighting.ColorShift_Top = Color3.new(1, 1, 1)
-                Lighting.GlobalShadows = false
-                Lighting.FogEnd = 9e9 -- ลบหมอกให้มองเห็นได้ไกลสุดๆ
-                Lighting.Brightness = 2
-            end)
-        end
-    else
-        if fullbrightConnection then
-            fullbrightConnection:Disconnect()
-            fullbrightConnection = nil
-            
-            -- คืนค่าแสงสว่างดั้งเดิมให้กับเกม
-            if originalLighting.Ambient then
-                Lighting.Ambient = originalLighting.Ambient
-                Lighting.ColorShift_Bottom = originalLighting.ColorShift_Bottom
-                Lighting.ColorShift_Top = originalLighting.ColorShift_Top
-                Lighting.GlobalShadows = originalLighting.GlobalShadows
-                Lighting.FogEnd = originalLighting.FogEnd
-                Lighting.Brightness = originalLighting.Brightness
-            end
-        end
-    end
+-- ==========================================
+-- Rejoin
+-- ==========================================
+function MiscSystem.Rejoin()
+	local success, err = pcall(function()
+		if #Players:GetPlayers() <= 1 then
+			-- เซิร์ฟเวอร์มีคนเดียว อาจปิดตัวหลังออก ต้อง Teleport ใหม่
+			LocalPlayer:Kick("\nRejoining...\n(Please wait...)")
+			task.wait()
+			TeleportService:Teleport(game.PlaceId, LocalPlayer)
+		else
+			TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer)
+		end
+	end)
+
+	if not success then
+		warn("[Diq] Rejoin failed:", err)
+	end
 end
 
 -- ==========================================
--- Anti-AFK System (ป้องกันโดนเตะเมื่ออยู่นิ่งๆ 20 นาที)
+-- Fullbright & No Fog
 -- ==========================================
-local VirtualUser = game:GetService("VirtualUser")
-local antiAfkConnection = nil
+function MiscSystem.SetFullbright(enable)
+	State.IsFullbright = enable
 
+	if enable then
+		if not Connections.Fullbright then
+			-- เก็บค่าแสงสว่างดั้งเดิม
+			OriginalLighting = {
+				Ambient = Lighting.Ambient,
+				ColorShift_Bottom = Lighting.ColorShift_Bottom,
+				ColorShift_Top = Lighting.ColorShift_Top,
+				GlobalShadows = Lighting.GlobalShadows,
+				FogEnd = Lighting.FogEnd,
+				Brightness = Lighting.Brightness,
+			}
+
+			-- บังคับเปลี่ยนค่าแสงทุกเฟรม (ป้องกันเกมเปลี่ยนกลับ)
+			Connections.Fullbright = RunService.RenderStepped:Connect(function()
+				Lighting.Ambient = FULLBRIGHT_AMBIENT
+				Lighting.ColorShift_Bottom = FULLBRIGHT_AMBIENT
+				Lighting.ColorShift_Top = FULLBRIGHT_AMBIENT
+				Lighting.GlobalShadows = false
+				Lighting.FogEnd = FULLBRIGHT_FOG_END
+				Lighting.Brightness = FULLBRIGHT_BRIGHTNESS
+			end)
+		end
+	else
+		if Connections.Fullbright then
+			Connections.Fullbright:Disconnect()
+			Connections.Fullbright = nil
+
+			-- คืนค่าแสงสว่างดั้งเดิม
+			if OriginalLighting.Ambient then
+				Lighting.Ambient = OriginalLighting.Ambient
+				Lighting.ColorShift_Bottom = OriginalLighting.ColorShift_Bottom
+				Lighting.ColorShift_Top = OriginalLighting.ColorShift_Top
+				Lighting.GlobalShadows = OriginalLighting.GlobalShadows
+				Lighting.FogEnd = OriginalLighting.FogEnd
+				Lighting.Brightness = OriginalLighting.Brightness
+			end
+			table.clear(OriginalLighting)
+		end
+	end
+end
+
+-- ==========================================
+-- Anti-AFK (ป้องกันโดนเตะเมื่ออยู่นิ่งๆ 20 นาที)
+-- ==========================================
 function MiscSystem.SetAntiAFK(enable)
-    if enable then
-        if not antiAfkConnection then
-            -- ดักจับจังหวะที่เกมเริ่มตรวจเจอว่าเราอยู่นิ่งๆ
-            antiAfkConnection = LocalPlayer.Idled:Connect(function()
-                -- จำลองการกดคลิกขวาแล้วปล่อย เพื่อรีเซ็ตเวลา 20 นาทีของเซิร์ฟเวอร์
-                VirtualUser:CaptureController()
-                VirtualUser:ClickButton2(Vector2.new())
-            end)
-        end
-    else
-        if antiAfkConnection then
-            antiAfkConnection:Disconnect()
-            antiAfkConnection = nil
-        end
-    end
+	State.IsAntiAFK = enable
+
+	if enable then
+		if not Connections.AntiAFK then
+			-- ดึง VirtualUser แบบ pcall เผื่อ executor ไม่รองรับ
+			local VirtualUser = nil
+			pcall(function()
+				VirtualUser = game:GetService("VirtualUser")
+			end)
+
+			if not VirtualUser then
+				warn("[Diq] Anti-AFK: VirtualUser service not available on this executor")
+				State.IsAntiAFK = false
+				return
+			end
+
+			Connections.AntiAFK = LocalPlayer.Idled:Connect(function()
+				pcall(function()
+					VirtualUser:CaptureController()
+					VirtualUser:ClickButton2(Vector2.new())
+				end)
+			end)
+		end
+	else
+		if Connections.AntiAFK then
+			Connections.AntiAFK:Disconnect()
+			Connections.AntiAFK = nil
+		end
+	end
+end
+
+-- ==========================================
+-- Destroy / Cleanup
+-- ==========================================
+function MiscSystem.Destroy()
+	-- คืนค่า Fullbright ก่อนปิด
+	if State.IsFullbright then
+		MiscSystem.SetFullbright(false)
+	end
+
+	-- ปิด Anti-AFK
+	if State.IsAntiAFK then
+		MiscSystem.SetAntiAFK(false)
+	end
+
+	-- Disconnect ที่เหลือ (ถ้ามี)
+	for key, connection in Connections do
+		if connection and connection.Connected then
+			connection:Disconnect()
+		end
+	end
+	table.clear(Connections)
+
+	State.IsFullbright = false
+	State.IsAntiAFK = false
+end
+
+-- ==========================================
+-- Public API — Getters
+-- ==========================================
+function MiscSystem.IsFullbright() return State.IsFullbright end
+function MiscSystem.IsAntiAFK() return State.IsAntiAFK end
+
+function MiscSystem.GetState()
+	return {
+		IsFullbright = State.IsFullbright,
+		IsAntiAFK = State.IsAntiAFK,
+	}
 end
 
 return MiscSystem

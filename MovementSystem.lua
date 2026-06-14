@@ -1,54 +1,73 @@
 -- ==========================================
--- ⚙️ Module: Movement System v2.0
+-- ⚙️ Module: Movement System v3.0 (Refactored)
 -- ==========================================
--- อัพเดท:
--- ✅ เพิ่ม SetFlySpeed / SetCFrameSpeed (ปรับค่าจาก Slider)
--- ✅ เพิ่ม ToggleFly (สลับโหมดบิน)
--- ✅ ใช้ generalized iteration (ไม่ใช้ pairs/ipairs)
--- ✅ โค้ดสะอาดขึ้น
 
 local Movement = {}
 
+-- ==========================================
+-- Services
+-- ==========================================
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local Players = game:GetService("Players")
-local Workspace = game:GetService("Workspace")
-
 local LocalPlayer = Players.LocalPlayer
-local Camera = Workspace.CurrentCamera
 
 -- ==========================================
--- ⚙️ Config — ปรับค่าได้จากภายนอก
+-- Constants
 -- ==========================================
-local CONFIG = {
-	FlySpeed    = 100,
-	CFrameSpeed = 60,
-	UpKey       = Enum.KeyCode.Space,
-	DownKey     = Enum.KeyCode.LeftControl,
+local DEFAULT_FLY_SPEED = 100
+local DEFAULT_CFRAME_SPEED = 60
+local FLY_UP_KEY = Enum.KeyCode.Space
+local FLY_DOWN_KEY = Enum.KeyCode.LeftControl
+
+-- ==========================================
+-- Config
+-- ==========================================
+local Config = {
+	FlySpeed = DEFAULT_FLY_SPEED,
+	CFrameSpeed = DEFAULT_CFRAME_SPEED,
 }
 
+-- ==========================================
+-- State
+-- ==========================================
 local State = {
-	IsFlying       = false,
-	IsCFrameSpeed  = false,
+	IsFlying = false,
+	IsCFrameSpeed = false,
 	IsInfinityJump = false,
-	IsNoClip       = false,
+	IsNoClip = false,
+	IsNoFling = false, -- ✅ เพิ่มเข้า State table ตั้งแต่แรก
 }
 
-local renderConnection = nil
+local Connections = {} -- เก็บ connections ทั้งหมดในที่เดียว
 
 -- ==========================================
--- 🔧 Internal Functions
+-- Helpers
 -- ==========================================
 
-local function getCharacterData()
-	local char = LocalPlayer.Character
-	if not char then return nil, nil end
-	return char:FindFirstChild("HumanoidRootPart"), char:FindFirstChild("Humanoid")
+--- ดึง CurrentCamera สดทุกครั้ง ป้องกัน camera เปลี่ยน
+local function GetCamera()
+	return workspace.CurrentCamera
 end
 
--- เปิด/ปิด แรงต้านแรงโน้มถ่วง
-local function toggleAntiGravity(enable)
-	local rootPart = getCharacterData()
+local function GetCharacterData()
+	local char = LocalPlayer.Character
+	if not char then return nil, nil end
+	return char:FindFirstChild("HumanoidRootPart"), char:FindFirstChildOfClass("Humanoid")
+end
+
+--- ตัดการเชื่อมต่อ connection อย่างปลอดภัย
+local function SafeDisconnect(key)
+	local conn = Connections[key]
+	if conn and conn.Connected then
+		conn:Disconnect()
+	end
+	Connections[key] = nil
+end
+
+--- เปิด/ปิด แรงต้านแรงโน้มถ่วง สำหรับ Fly
+local function ToggleAntiGravity(enable)
+	local rootPart = GetCharacterData()
 	if not rootPart then return end
 
 	if enable then
@@ -73,213 +92,236 @@ local function toggleAntiGravity(enable)
 end
 
 -- ==========================================
--- 🎮 RenderStepped — อัพเดททุกเฟรม
+-- Core Logic — RenderStepped
 -- ==========================================
-local function onRenderStepped(deltaTime)
-	local rootPart, humanoid = getCharacterData()
+local function OnRenderStepped(deltaTime)
+	local rootPart, humanoid = GetCharacterData()
 	if not rootPart or not humanoid then return end
+
+	local camera = GetCamera()
+	if not camera then return end
 
 	if State.IsFlying then
 		local moveVector = Vector3.zero
 
-		if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveVector += Camera.CFrame.LookVector end
-		if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveVector -= Camera.CFrame.LookVector end
-		if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveVector += Camera.CFrame.RightVector end
-		if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveVector -= Camera.CFrame.RightVector end
-		if UserInputService:IsKeyDown(CONFIG.UpKey) then moveVector += Vector3.new(0, 1, 0) end
-		if UserInputService:IsKeyDown(CONFIG.DownKey) then moveVector -= Vector3.new(0, 1, 0) end
+		if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveVector += camera.CFrame.LookVector end
+		if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveVector -= camera.CFrame.LookVector end
+		if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveVector += camera.CFrame.RightVector end
+		if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveVector -= camera.CFrame.RightVector end
+		if UserInputService:IsKeyDown(FLY_UP_KEY) then moveVector += Vector3.yAxis end
+		if UserInputService:IsKeyDown(FLY_DOWN_KEY) then moveVector -= Vector3.yAxis end
 
 		if moveVector.Magnitude > 0 then moveVector = moveVector.Unit end
 
 		local rootPos = rootPart.Position
-		local cameraLook = Camera.CFrame.LookVector
+		local cameraLook = camera.CFrame.LookVector
 		local lookAtPos = rootPos + Vector3.new(cameraLook.X, 0, cameraLook.Z)
 
-		rootPart.CFrame = CFrame.new(rootPos, lookAtPos) + (moveVector * CONFIG.FlySpeed * deltaTime)
+		rootPart.CFrame = CFrame.new(rootPos, lookAtPos) + (moveVector * Config.FlySpeed * deltaTime)
 
 	elseif State.IsCFrameSpeed then
 		local walkDir = humanoid.MoveDirection
 		if walkDir.Magnitude > 0 then
 			walkDir = Vector3.new(walkDir.X, 0, walkDir.Z).Unit
-			rootPart.CFrame = rootPart.CFrame + (walkDir * CONFIG.CFrameSpeed * deltaTime)
+			rootPart.CFrame = rootPart.CFrame + (walkDir * Config.CFrameSpeed * deltaTime)
 		end
 	end
 end
 
--- จัดการ connection อย่างปลอดภัย
+--- จัดการ RenderStepped connection — เปิดเมื่อจำเป็น ปิดเมื่อไม่ใช้
 local function UpdateRenderConnection()
-	if (State.IsFlying or State.IsCFrameSpeed) and not renderConnection then
-		renderConnection = RunService.RenderStepped:Connect(onRenderStepped)
-	elseif not State.IsFlying and not State.IsCFrameSpeed and renderConnection then
-		renderConnection:Disconnect()
-		renderConnection = nil
+	local needsRender = State.IsFlying or State.IsCFrameSpeed
+
+	if needsRender and not Connections.Render then
+		Connections.Render = RunService.RenderStepped:Connect(OnRenderStepped)
+	elseif not needsRender then
+		SafeDisconnect("Render")
 	end
 end
 
 -- ==========================================
--- 🔧 Public API
+-- Character Respawn Handler
+-- ==========================================
+local function OnCharacterAdded()
+	-- รีเซ็ตทุก state เมื่อตัวละครเกิดใหม่
+	State.IsFlying = false
+	State.IsCFrameSpeed = false
+	State.IsNoClip = false
+	State.IsNoFling = false
+	State.IsInfinityJump = false -- ✅ เพิ่ม reset InfinityJump
+
+	UpdateRenderConnection()
+	SafeDisconnect("NoClip")
+	SafeDisconnect("NoFling")
+	SafeDisconnect("InfinityJump") -- ✅ เพิ่ม disconnect InfinityJump
+end
+
+-- ==========================================
+-- Initialize / Destroy
+-- ==========================================
+local function Initialize()
+	Connections.CharacterAdded = LocalPlayer.CharacterAdded:Connect(OnCharacterAdded)
+end
+
+--- ทำลายทุกอย่าง ป้องกัน leak เมื่อ execute ซ้ำ
+function Movement.Destroy()
+	-- คืนค่า Fly state
+	if State.IsFlying then
+		local _, humanoid = GetCharacterData()
+		if humanoid then humanoid.PlatformStand = false end
+		ToggleAntiGravity(false)
+	end
+
+	-- Disconnect ทุก connection
+	for key in Connections do
+		SafeDisconnect(key)
+	end
+	table.clear(Connections)
+
+	-- Reset state
+	for key in State do
+		State[key] = false
+	end
+end
+
+-- ==========================================
+-- Public API — Feature Controls
 -- ==========================================
 
--- เปิด/ปิดโหมดบิน
+--- เปิด/ปิดโหมดบิน
 function Movement.SetFly(enable)
 	State.IsFlying = enable
-	local rootPart, humanoid = getCharacterData()
+	local _, humanoid = GetCharacterData()
 	if humanoid then
 		humanoid.PlatformStand = enable
-		toggleAntiGravity(enable)
+		ToggleAntiGravity(enable)
 	end
 	UpdateRenderConnection()
 end
 
--- สลับโหมดบิน (toggle)
+--- สลับโหมดบิน
 function Movement.ToggleFly()
 	Movement.SetFly(not State.IsFlying)
 	return State.IsFlying
 end
 
--- เปิด/ปิดวิ่งเร็ว
+--- เปิด/ปิดวิ่งเร็ว
 function Movement.SetSpeed(enable)
 	State.IsCFrameSpeed = enable
 	UpdateRenderConnection()
 end
 
--- สลับวิ่งเร็ว (toggle)
+--- สลับวิ่งเร็ว
 function Movement.ToggleSpeed()
 	Movement.SetSpeed(not State.IsCFrameSpeed)
 	return State.IsCFrameSpeed
 end
 
--- เปิด/ปิดทะลุกำแพง (NoClip)
-local noClipConnection = nil
+--- เปิด/ปิดทะลุกำแพง
 function Movement.SetNoClip(enable)
 	State.IsNoClip = enable
-	if enable and not noClipConnection then
-		noClipConnection = RunService.Stepped:Connect(function()
-			if State.IsNoClip then
-				local char = LocalPlayer.Character
-				if char then
-					for _, part in char:GetDescendants() do
-						if part:IsA("BasePart") and part.CanCollide then
+	if enable and not Connections.NoClip then
+		Connections.NoClip = RunService.Stepped:Connect(function()
+			if not State.IsNoClip then return end
+			local char = LocalPlayer.Character
+			if not char then return end
+			for _, part in char:GetDescendants() do
+				if part:IsA("BasePart") and part.CanCollide then
+					part.CanCollide = false
+				end
+			end
+		end)
+	elseif not enable then
+		SafeDisconnect("NoClip")
+	end
+end
+
+--- สลับทะลุกำแพง
+function Movement.ToggleNoClip()
+	Movement.SetNoClip(not State.IsNoClip)
+	return State.IsNoClip
+end
+
+--- เปิด/ปิด กระโดดไร้ขีดจำกัด
+function Movement.SetInfinityJump(enable)
+	State.IsInfinityJump = enable
+	if enable and not Connections.InfinityJump then
+		Connections.InfinityJump = UserInputService.JumpRequest:Connect(function()
+			if not State.IsInfinityJump then return end
+			local _, humanoid = GetCharacterData()
+			if humanoid then
+				humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+			end
+		end)
+	elseif not enable then
+		SafeDisconnect("InfinityJump")
+	end
+end
+
+--- เปิด/ปิด ป้องกันโดนชนปลิว
+function Movement.SetNoFling(enable)
+	State.IsNoFling = enable
+	if enable and not Connections.NoFling then
+		Connections.NoFling = RunService.Stepped:Connect(function()
+			if not State.IsNoFling then return end
+			for _, player in Players:GetPlayers() do
+				if player ~= LocalPlayer and player.Character then
+					for _, part in player.Character:GetDescendants() do
+						if part:IsA("BasePart") then
 							part.CanCollide = false
 						end
 					end
 				end
 			end
 		end)
-	elseif not enable and noClipConnection then
-		noClipConnection:Disconnect()
-		noClipConnection = nil
+	elseif not enable then
+		SafeDisconnect("NoFling")
 	end
 end
 
--- สลับทะลุกำแพง (toggle)
-function Movement.ToggleNoClip()
-	Movement.SetNoClip(not State.IsNoClip)
-	return State.IsNoClip
-end
-
--- ตั้งค่าความเร็วบิน (ใช้กับ Slider)
-function Movement.SetFlySpeed(speed)
-	CONFIG.FlySpeed = speed
-end
-
--- ตั้งค่าความเร็ววิ่ง (ใช้กับ Slider)
-function Movement.SetCFrameSpeed(speed)
-	CONFIG.CFrameSpeed = speed
-end
-
--- เปิด/ปิด กระโดดไร้ขีดจำกัด (Infinity Jump)
-local jumpConnection = nil
-function Movement.SetInfinityJump(enable)
-	State.IsInfinityJump = enable
-	if enable and not jumpConnection then
-		jumpConnection = UserInputService.JumpRequest:Connect(function()
-			if State.IsInfinityJump then
-				local _, humanoid = getCharacterData()
-				if humanoid then
-					humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-				end
-			end
-		end)
-	elseif not enable and jumpConnection then
-		jumpConnection:Disconnect()
-		jumpConnection = nil
-	end
-end
-
--- รีเซ็ตตัวละคร
-function Movement.ResetCharacter()
-	local _, humanoid = getCharacterData()
-	if humanoid then
-		humanoid.Health = 0
-	end
-end
-
--- ปลดล็อค Anchor
-function Movement.Unanchor()
-	local rootPart = getCharacterData()
-	if rootPart then
-		rootPart.Anchored = false
-	end
-end
-
--- เปิด/ปิด ป้องกันโดนชนปลิว (NoFling)
-local noFlingConnection = nil
-function Movement.SetNoFling(enable)
-	State.IsNoFling = enable
-	if enable and not noFlingConnection then
-		noFlingConnection = RunService.Stepped:Connect(function()
-			if State.IsNoFling then
-				for _, player in ipairs(Players:GetPlayers()) do
-					if player ~= LocalPlayer and player.Character then
-						for _, part in ipairs(player.Character:GetDescendants()) do
-							if part:IsA("BasePart") then
-								part.CanCollide = false
-							end
-						end
-					end
-				end
-			end
-		end)
-	elseif not enable and noFlingConnection then
-		noFlingConnection:Disconnect()
-		noFlingConnection = nil
-	end
-end
-
--- สลับสถานะ NoFling
+--- สลับ NoFling
 function Movement.ToggleNoFling()
 	Movement.SetNoFling(not State.IsNoFling)
 	return State.IsNoFling
 end
 
--- ดึงสถานะปัจจุบัน
+-- ==========================================
+-- Public API — Speed Settings
+-- ==========================================
+function Movement.SetFlySpeed(speed) Config.FlySpeed = speed end
+function Movement.SetCFrameSpeed(speed) Config.CFrameSpeed = speed end
+
+-- ==========================================
+-- Public API — Actions
+-- ==========================================
+function Movement.ResetCharacter()
+	local _, humanoid = GetCharacterData()
+	if humanoid then humanoid.Health = 0 end
+end
+
+function Movement.Unanchor()
+	local rootPart = GetCharacterData()
+	if rootPart then rootPart.Anchored = false end
+end
+
+-- ==========================================
+-- Public API — Getters
+-- ==========================================
 function Movement.GetState()
 	return {
 		IsFlying = State.IsFlying,
 		IsCFrameSpeed = State.IsCFrameSpeed,
-		FlySpeed = CONFIG.FlySpeed,
-		CFrameSpeed = CONFIG.CFrameSpeed,
+		IsInfinityJump = State.IsInfinityJump,
+		IsNoClip = State.IsNoClip,
+		IsNoFling = State.IsNoFling, -- ✅ เพิ่มครบทุก state
+		FlySpeed = Config.FlySpeed,
+		CFrameSpeed = Config.CFrameSpeed,
 	}
 end
 
 -- ==========================================
--- 🔄 รีเซ็ตค่าตอนตัวละครตาย / respawn
+-- Boot
 -- ==========================================
-LocalPlayer.CharacterAdded:Connect(function()
-	State.IsFlying = false
-	State.IsCFrameSpeed = false
-	State.IsNoClip = false
-	State.IsNoFling = false
-	UpdateRenderConnection()
-	if noClipConnection then
-		noClipConnection:Disconnect()
-		noClipConnection = nil
-	end
-	if noFlingConnection then
-		noFlingConnection:Disconnect()
-		noFlingConnection = nil
-	end
-end)
+Initialize()
 
 return Movement

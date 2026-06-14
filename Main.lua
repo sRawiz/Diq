@@ -1,10 +1,11 @@
 -- ==========================================
--- 🎮 Loader / Main Controller v2.1
+-- 🎮 Loader / Main Controller v3.0 (Refactored)
 -- ==========================================
--- อัพเดท: ใช้ Lucide Icons แทน Emoji
--- ✅ โหลด DiqIcons module
--- ✅ Tab ใช้ icon ชื่อ เช่น "move", "settings"
--- ✅ Button / Toggle ใส่ { Icon = "name" }
+-- Changes:
+-- ✅ Cleanup ระบบเก่าก่อนโหลดใหม่ (ป้องกัน execute ซ้ำ leak)
+-- ✅ LoadModule helper พร้อม pcall (ป้องกัน crash ทั้งหมด)
+-- ✅ ใช้ os.clock() แทน tick() (deprecated)
+-- ✅ ลงทะเบียน _G.DiqCleanup สำหรับ execute ครั้งถัดไป
 
 -- ⚠️ เปลี่ยนให้ตรงกับ GitHub ของคุณ ⚠️
 local GITHUB_USERNAME = "sRawiz"
@@ -12,17 +13,62 @@ local REPO_NAME = "Diq"
 
 local BASE_URL = "https://raw.githubusercontent.com/" .. GITHUB_USERNAME .. "/" .. REPO_NAME .. "/main/"
 
--- โหลด Module ผ่านอินเทอร์เน็ต
-local DiqUI    = loadstring(game:HttpGet(BASE_URL .. "DiqUILib.lua?_=" .. tostring(tick())))()
-local DiqIcons = loadstring(game:HttpGet(BASE_URL .. "DiqIcons.lua?_=" .. tostring(tick())))()
-local Movement = loadstring(game:HttpGet(BASE_URL .. "MovementSystem.lua?_=" .. tostring(tick())))()
-local ESP      = loadstring(game:HttpGet(BASE_URL .. "ESPSystem.lua?_=" .. tostring(tick())))()
-local Aimbot   = loadstring(game:HttpGet(BASE_URL .. "AimbotSystem.lua?_=" .. tostring(tick())))()
-local Hitbox   = loadstring(game:HttpGet(BASE_URL .. "HitboxSystem.lua?_=" .. tostring(tick())))()
-local Misc     = loadstring(game:HttpGet(BASE_URL .. "MiscSystem.lua?_=" .. tostring(tick())))()
+-- ==========================================
+-- 🔄 Cleanup ระบบเก่า (ป้องกัน execute ซ้ำ leak)
+-- ==========================================
+if _G.DiqCleanup then
+	pcall(_G.DiqCleanup)
+end
+
+-- ==========================================
+-- 📦 Module Loader (with error handling)
+-- ==========================================
+local function LoadModule(name)
+	local cacheBust = tostring(os.clock()) -- ✅ แทน tick() ที่ deprecated
+	local url = BASE_URL .. name .. ".lua?_=" .. cacheBust
+
+	local success, result = pcall(function()
+		return loadstring(game:HttpGet(url))()
+	end)
+
+	if success then
+		return result
+	else
+		warn("[Diq] Failed to load " .. name .. ": " .. tostring(result))
+		return nil
+	end
+end
+
+local DiqUI    = LoadModule("DiqUILib")
+local DiqIcons = LoadModule("DiqIcons")
+local Movement = LoadModule("MovementSystem")
+local ESP      = LoadModule("ESPSystem")
+local Aimbot   = LoadModule("AimbotSystem")
+local Hitbox   = LoadModule("HitboxSystem")
+local Misc     = LoadModule("MiscSystem")
+
+-- ตรวจสอบว่า Module หลักโหลดสำเร็จ
+if not DiqUI then
+	error("[Diq] Critical: DiqUILib failed to load. Aborting.")
+	return
+end
+
+-- ==========================================
+-- 🔧 ลงทะเบียน Cleanup สำหรับ execute ครั้งถัดไป
+-- ==========================================
+_G.DiqCleanup = function()
+	pcall(function() if Aimbot and Aimbot.Destroy then Aimbot.Destroy() end end)
+	pcall(function() if ESP and ESP.Destroy then ESP.Destroy() end end)
+	pcall(function() if Hitbox and Hitbox.Destroy then Hitbox.Destroy() end end)
+	pcall(function() if Movement and Movement.Destroy then Movement.Destroy() end end)
+	pcall(function() if Misc and Misc.Destroy then Misc.Destroy() end end)
+	pcall(function() if DiqUI and DiqUI.Destroy then DiqUI.Destroy() end end)
+end
 
 -- ⭐ โหลด Icon เข้า Library (ทำครั้งเดียว)
-DiqUI:LoadIcons(DiqIcons)
+if DiqIcons then
+	DiqUI:LoadIcons(DiqIcons)
+end
 
 local MyWindow = DiqUI:CreateWindow({
 	Title = "Diq",
@@ -295,11 +341,11 @@ end, { Icon = "rotate-ccw" })
 settingsTab:CreateLabel("ABOUT")
 
 settingsTab:CreateButton("About Diq Panel", function()
-	DiqUI:Notify("Diq UI Library", "Version 2.1 — by sRawiz\nLucide Icons Edition", 3, "info")
+	DiqUI:Notify("Diq UI Library", "Version 3.0 — by sRawiz\nRefactored Edition", 3, "info")
 end, { Icon = "info" })
 
 -- ==========================================
 -- ✅ แจ้งเตือนว่าโหลดสำเร็จ
 -- ==========================================
-DiqUI:Notify("Loaded Successfully!", "Diq Panel v2.1 is ready\nPress RightShift to toggle UI", 4, "success")
-print("[Diq] Panel v2.1 Loaded Successfully!")
+DiqUI:Notify("Loaded Successfully!", "Diq Panel v3.0 is ready\nPress RightShift to toggle UI", 4, "success")
+print("[Diq] Panel v3.0 Loaded Successfully!")
