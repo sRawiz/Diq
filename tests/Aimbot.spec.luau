@@ -25,7 +25,7 @@ local UDim = {new=function(...) return {...} end}
 local UDim2 = {fromOffset=vec}
 local Enum = {
  RaycastFilterType={Exclude=1}, MouseBehavior={Default=1,LockCenter=2},
- UserInputType={MouseButton2=2,MouseButton1=1,Keyboard=3}, KeyCode={Q=10,E=11,Unknown=0}, RenderPriority={Camera={Value=200},Last={Value=2000}},
+ UserInputType={MouseButton2=2,MouseButton1=1,Keyboard=3}, KeyCode={Q=10,E=11,T=12,Unknown=0}, RenderPriority={Camera={Value=200},Last={Value=2000}},
 }
 local instances = {}
 local Instance = { new = function(class)
@@ -177,6 +177,7 @@ Input.InputBegan:Fire({UserInputType=3,KeyCode=10},false); tick(); assert(not A.
 Input.InputBegan:Fire({UserInputType=3,KeyCode=11},false); tick(); assert(A.GetStatus().Active,'new key toggles')
 A.SetEnabled(false); A.SetEnabled(true); tick(); assert(not A.GetStatus().Active,'master re-enable starts inactive')
 -- Deterministic ranking, challenger debounce and invalidation.
+A.SetAutoSwitch(true)
 A.SetActivationKey('MouseButton2'); A.SetActivationMode('Hold'); press()
 A.SetTargetMode('Smart')
 enemy.Character.Head.Position=vec(430,300,10); other.Character.Head.Position=vec(450,300,10)
@@ -215,6 +216,54 @@ other.Character.Head.Position=vec(405,300,10)
 for _=1,8 do tick() end
 target(enemy.Character.Head,'interrupted challenger loses accumulated timer')
 A.SetTargetMode('Sticky')
+-- Default manual control keeps the ranked target until explicitly cycled.
+A.SetAutoSwitch(false); A.SetTargetMode('Balanced')
+A.SetActivationKey('MouseButton2'); A.SetActivationMode('Hold'); press()
+enemy.Character.Head.Position=vec(430,300,10); other.Character.Head.Position=vec(405,300,10)
+local third={Name='Third',UserId=30,Parent=Players,Team='red',Neutral=false,Character=character(440,300)}
+Players.list={LocalPlayer,third,other,enemy}
+target(other.Character.Head,'balanced still chooses initial target')
+enemy.Character.Head.Position=vec(401,300,10)
+for _=1,60 do tick() end
+target(other.Character.Head,'auto switch OFF keeps original valid target')
+enemy.Character.Head.Position=vec(430,300,10)
+Input.InputBegan:Fire({UserInputType=3,KeyCode=12},false)
+target(enemy.Character.Head,'T cycles to next ranked candidate')
+-- A camera turn changes rankings; the remembered cycle must still reach third.
+enemy.Character.Head.Position=vec(400,300,10)
+other.Character.Head.Position=vec(435,300,10)
+assert(A.NextTarget()); target(third.Character.Head,'manual cycle reaches third player')
+assert(A.NextTarget()); target(other.Character.Head,'manual cycle wraps')
+enemy.Character.Head.Position=vec(430,300,10); other.Character.Head.Position=vec(405,300,10)
+assert(not A.SetNextTargetKey('MouseButton2'),'next target requires keyboard')
+assert(A.SetNextTargetKey('E'))
+Input.InputBegan:Fire({UserInputType=3,KeyCode=12},false)
+target(other.Character.Head,'old next key has no effect')
+Input.InputBegan:Fire({UserInputType=3,KeyCode=11},false)
+target(enemy.Character.Head,'new next key works')
+Input.textbox={}; assert(not A.NextTarget(),'typing blocks manual cycling')
+Input.textbox=nil
+assert(A.SetNextTargetKey('T'))
+assert(not A.SetActivationKey('T'),'activation cannot collide with next key')
+assert(A.GetActivationKey()=='MouseButton2','failed rebind preserves activation')
+assert(A.SetActivationKey('Q'))
+assert(not A.SetNextTargetKey('Q'),'next key cannot collide with activation')
+assert(A.GetNextTargetKey()=='T','failed rebind preserves next key')
+assert(not A.NextTarget(),'rebind resets active state')
+A.SetActivationKey('MouseButton2'); A.SetActivationMode('Hold'); press()
+assert(A.NextTarget()); Input.WindowFocusReleased:Fire(); Input.WindowFocused:Fire()
+assert(not A.NextTarget(),'focus loss cancels queued cycling and active state')
+press(); target(other.Character.Head,'focus regain begins with fresh selection')
+Players.list={LocalPlayer,enemy,other}
+A.SetTargetMode('Sticky')
+-- Rebinding is input capture: neither activation nor cycling may run.
+A.SetInputSuspended(true)
+Input.InputBegan:Fire({UserInputType=2},false)
+assert(not A.NextTarget(),'input capture blocks cycling')
+target(nil,'input capture clears target and activation')
+A.SetInputSuspended(false)
+target(nil,'finishing rebind does not reactivate aim')
+press()
 -- Diagnostics expose the actual filters instead of guessing at the game.
 A.SetActivationKey('MouseButton2'); A.SetActivationMode('Hold'); press()
 enemy.Team='blue'; other.Team='blue'; tick()

@@ -14,10 +14,14 @@ local Config = {
 	TeamCheck = true, MaxDistance = 3000,
 	ActivationKey = "Q", ActivationMode = "Toggle",
 	TargetMode = "Balanced", CrosshairWeight = 0.7, SwitchDelay = 0.2,
+	AutoSwitch = false, NextTargetKey = "T",
 }
 local initialized, destroyed, bound = false, false, false
 local focused, held, aiming = true, false, false
 local currentPlayer, currentPart
+local nextRequested = false
+local cycleOrder = nil
+local inputSuspended = false
 local lastAimDirection, lastCamera
 local challenger, challengerTime = nil, 0
 local scanElapsed = 0
@@ -35,13 +39,15 @@ local function updateStatusLabel()
 	if statusLabel then
 		statusLabel.Visible = Config.Enabled
 		local activation = Config.ActivationMode .. " " .. Config.ActivationKey .. ": " .. (held and "ON" or "OFF")
-		statusLabel.Text = "Diq Aim | " .. activation .. " | " .. Config.TargetMode .. " | " .. status
+		statusLabel.Text = "Diq Aim | " .. activation .. " | " .. Config.TargetMode .. " | Next: " .. Config.NextTargetKey .. " | " .. status
 	end
 end
 
 local function releaseTarget()
 	currentPlayer, currentPart, aiming = nil, nil, false
 	lastAimDirection = nil
+	nextRequested = false
+	cycleOrder = nil
 	challenger, challengerTime, scanElapsed = nil, 0, 0
 	updateStatusLabel()
 end
@@ -124,13 +130,49 @@ local function better(score, player, bestScore, bestPlayer)
 end
 
 local function selectTarget(camera, origin, dt)
+	if nextRequested then
+		nextRequested = false
+		local candidates = {}
+		for _, player in ipairs(Players:GetPlayers()) do
+			local part, point, distance = evaluate(player, camera, origin)
+			if part then
+				table.insert(candidates, { Player = player, Part = part, Point = point,
+					Score = scoreTarget(part, distance, camera) })
+			end
+		end
+		table.sort(candidates, function(a, b) return better(a.Score, a.Player, b.Score, b.Player) end)
+		-- Preserve a cycle order across presses; reranking after every camera
+		-- turn otherwise bounces between two players and can starve the third.
+		local available = {}
+		for _, candidate in ipairs(candidates) do available[candidate.Player] = candidate end
+		local ordered, included = {}, {}
+		for _, player in ipairs(cycleOrder or {}) do
+			if available[player] then table.insert(ordered, player); included[player] = true end
+		end
+		for _, candidate in ipairs(candidates) do
+			if not included[candidate.Player] then table.insert(ordered, candidate.Player) end
+		end
+		cycleOrder = ordered
+		local index = 1
+		for i, player in ipairs(ordered) do
+			if player == currentPlayer then index = i % #ordered + 1; break end
+		end
+		local selected = ordered[index] and available[ordered[index]]
+		if selected then
+			currentPlayer = selected.Player
+			challenger, challengerTime, scanElapsed = nil, 0, 0
+			return selected.Part, selected.Point
+		end
+		releaseTarget()
+		return nil
+	end
 	local part, point, distance
 	if currentPlayer then part, point, distance = evaluate(currentPlayer, camera, origin) end
 	if not part then releaseTarget() end
 	local currentScore = part and scoreTarget(part, distance, camera) or math.huge
 	scanElapsed = scanElapsed + math.clamp(dt, 0, 0.1)
 	-- Validate the current target every frame, but search challengers at 10 Hz.
-	if part and (Config.TargetMode == "Sticky" or scanElapsed < SCAN_INTERVAL) then
+	if part and (not Config.AutoSwitch or Config.TargetMode == "Sticky" or scanElapsed < SCAN_INTERVAL) then
 		return part, point
 	end
 	local elapsed = scanElapsed
@@ -162,6 +204,7 @@ local function selectTarget(camera, origin, dt)
 		end
 		if challengerTime >= Config.SwitchDelay then
 			currentPlayer = bestPlayer
+			cycleOrder = nil
 			challenger, challengerTime = nil, 0
 			return bestPart, bestPoint
 		end
@@ -205,7 +248,7 @@ end
 local function step(dt)
 	local camera = workspace.CurrentCamera
 	if camera ~= lastCamera then releaseTarget(); lastCamera = camera end
-	local blocked = not focused or GuiService.MenuIsOpen or Input:GetFocusedTextBox() ~= nil
+	local blocked = inputSuspended or not focused or GuiService.MenuIsOpen or Input:GetFocusedTextBox() ~= nil
 	if fovFrame then fovFrame.Visible = Config.Enabled and Config.ShowFOV and camera ~= nil and not blocked end
 	if not camera then status = "No camera"; releaseTarget(); return end
 	local inset = GuiService:GetGuiInset()
@@ -283,8 +326,12 @@ function AimbotSystem.Init()
 	local ok, err = pcall(function()
 		createOverlay()
 		table.insert(connections, Input.InputBegan:Connect(function(input, processed)
-			if not Config.Enabled or not matchesActivation(input) then return end
-			if processed or not focused or GuiService.MenuIsOpen or Input:GetFocusedTextBox() ~= nil then return end
+			if inputSuspended or not Config.Enabled or processed or not focused or GuiService.MenuIsOpen or Input:GetFocusedTextBox() ~= nil then return end
+			if input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode == Enum.KeyCode[Config.NextTargetKey] then
+				AimbotSystem.NextTarget()
+				return
+			end
+			if not matchesActivation(input) then return end
 			held = Config.ActivationMode == "Toggle" and not held or Config.ActivationMode == "Hold"
 			status = held and "Searching" or "Waiting for " .. Config.ActivationKey
 			releaseTarget()
@@ -325,11 +372,40 @@ end
 function AimbotSystem.SetActivationKey(key)
 	assert(type(key) == "string" and (key == "MouseButton1" or key == "MouseButton2"
 		or (key ~= "Unknown" and Enum.KeyCode[key] ~= nil)), "Expected a keyboard key name or mouse button")
+	if key == Config.NextTargetKey then return false, "Aim and Next Target must use different buttons" end
 	Config.ActivationKey = key
 	status = "Waiting for " .. key
 	held = false
 	releaseTarget()
+	return true
 end
+function AimbotSystem.SetInputSuspended(value)
+	inputSuspended = value == true
+	if inputSuspended then
+		held = false
+		status = "Paused: editing keybind"
+		releaseTarget()
+	end
+end
+function AimbotSystem.NextTarget()
+	if inputSuspended or destroyed or not Config.Enabled or not held or not focused or GuiService.MenuIsOpen or Input:GetFocusedTextBox() ~= nil then return false end
+	nextRequested = true
+	return true
+end
+function AimbotSystem.SetNextTargetKey(key)
+	if type(key) ~= "string" or key == "Unknown" or not Enum.KeyCode[key] then return false, "Choose a keyboard key" end
+	if key == Config.ActivationKey then return false, "Aim and Next Target must use different buttons" end
+	Config.NextTargetKey = key
+	nextRequested = false
+	updateStatusLabel()
+	return true
+end
+function AimbotSystem.GetNextTargetKey() return Config.NextTargetKey end
+function AimbotSystem.SetAutoSwitch(value)
+	Config.AutoSwitch = value == true
+	challenger, challengerTime, scanElapsed = nil, 0, 0
+end
+function AimbotSystem.GetAutoSwitch() return Config.AutoSwitch end
 function AimbotSystem.SetActivationMode(mode)
 	assert(mode == "Hold" or mode == "Toggle", "Expected Hold or Toggle")
 	Config.ActivationMode = mode
@@ -343,6 +419,7 @@ function AimbotSystem.GetStatus()
 	return { Reason = destroyed and "Destroyed" or (not Config.Enabled and "Disabled" or status),
 		Active = held, Tracking = aiming, Method = Config.AimMethod,
 		ActivationKey = Config.ActivationKey, ActivationMode = Config.ActivationMode,
+		AutoSwitch = Config.AutoSwitch, NextTargetKey = Config.NextTargetKey,
 		TargetMode = Config.TargetMode, TargetName = currentPlayer and currentPlayer.Name or nil,
 		Rejected = table.clone(rejected) }
 end

@@ -1574,6 +1574,7 @@ function Diq:CreateWindow(config)
 				if listening or keyCaptureOwner then return end
 				keyCaptureOwner = frame
 				listening = true
+				if options.OnListeningChanged then options.OnListeningChanged(true) end
 				keyBtn.Text = "..."
 				Tween(kbStroke, 0.2, { Color = Theme.Accent })
 			end))
@@ -1592,6 +1593,7 @@ function Diq:CreateWindow(config)
 						listening = false
 						task.defer(function()
 							if keyCaptureOwner == frame then keyCaptureOwner = nil end
+							if options.OnListeningChanged then options.OnListeningChanged(false) end
 						end)
 						Tween(kbStroke, 0.2, { Color = Theme.Outline })
 					end
@@ -1615,6 +1617,7 @@ function Diq:CreateWindow(config)
 			function obj:SetText(t) lbl.Text = t end
 			function obj:SetVisible(v) frame.Visible = v end
 			function obj:Destroy()
+				if listening and options.OnListeningChanged then options.OnListeningChanged(false) end
 				listening = false
 				if keyCaptureOwner == frame then keyCaptureOwner = nil end
 				frame:Destroy()

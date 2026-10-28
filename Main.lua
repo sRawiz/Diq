@@ -65,7 +65,7 @@ local function Start()
 	local DiqIcons = LoadModule("DiqIcons", {  }, true)
 	local Movement = LoadModule("MovementSystem", { "Destroy", "Init", "ResetCharacter", "SetCFrameSpeed", "SetFly", "SetFlySpeed", "SetInfinityJump", "SetNoClip", "SetNoFling", "SetSpeed", "Unanchor" })
 	local ESP = LoadModule("ESPSystem", { "Destroy", "Init", "SetBoxes", "SetEnabled", "SetHealth", "SetHighlights", "SetNames", "SetTracers", "SetUseTeamColor" })
-	local Aimbot = LoadModule("AimbotSystem", { "Destroy", "GetStatus", "Init", "SetActivationKey", "SetActivationMode", "SetAimMethod", "SetAimPart", "SetEnabled", "SetFOVRadius", "SetMaxDistance", "SetShowFOV", "SetSmoothing", "SetTeamCheck", "SetTargetMode", "SetCrosshairWeight", "SetSwitchDelay", "SetWallCheck" })
+	local Aimbot = LoadModule("AimbotSystem", { "Destroy", "GetStatus", "Init", "SetActivationKey", "SetActivationMode", "SetAimMethod", "SetAimPart", "SetEnabled", "SetFOVRadius", "SetMaxDistance", "SetShowFOV", "SetSmoothing", "SetTeamCheck", "SetTargetMode", "SetCrosshairWeight", "SetSwitchDelay", "SetAutoSwitch", "SetInputSuspended", "SetNextTargetKey", "GetNextTargetKey", "GetActivationKey", "SetWallCheck" })
 	local Hitbox = LoadModule("HitboxSystem", { "Destroy", "Init", "SetEnabled", "SetSize", "SetTargetPart", "SetTeamCheck", "SetTransparency" })
 	local Misc = LoadModule("MiscSystem", { "Destroy", "Rejoin", "SetAntiAFK", "SetFullbright" })
 
@@ -194,7 +194,7 @@ local function Start()
 	combatTab:CreateToggle("Enable Aimbot", false, function(state)
 		Aimbot.SetEnabled(state)
 		if state then
-			DiqUI:Notify("Aimbot Enabled", "Press Q to start / stop aiming (configurable below)", 3, "info")
+			DiqUI:Notify("Aimbot Enabled", "Q: start / stop aiming. T: next target. Buttons configurable below.", 3, "info")
 		end
 	end, { Icon = "crosshair" })
 
@@ -203,15 +203,42 @@ local function Start()
 	end)
 	local keyboardAimKey = Enum.KeyCode.Q
 	local aimButtonDropdown
+	local selectedAimButton = "Keyboard"
 	aimButtonDropdown = combatTab:CreateDropdown("Aim Button", { "Keyboard", "Right Mouse", "Left Mouse" }, "Keyboard", function(button)
 		local key = button == "Right Mouse" and "MouseButton2" or (button == "Left Mouse" and "MouseButton1" or keyboardAimKey.Name)
-		Aimbot.SetActivationKey(key)
+		local ok, reason = Aimbot.SetActivationKey(key)
+		if not ok then
+			aimButtonDropdown:Set(selectedAimButton)
+			DiqUI:Notify("Key Conflict", reason, 4, "warning")
+		else
+			selectedAimButton = button
+		end
 	end)
-	combatTab:CreateKeybind("Keyboard Aim Button", Enum.KeyCode.Q, nil, {
+	local aimKeybind, nextKeybind
+	local restoringKey = false
+	aimKeybind = combatTab:CreateKeybind("Keyboard Aim Button", Enum.KeyCode.Q, nil, {
+		OnListeningChanged = Aimbot.SetInputSuspended,
 		OnChanged = function(key)
+			if restoringKey then return end
+			local ok, reason = Aimbot.SetActivationKey(key.Name)
+			if not ok then
+				restoringKey = true; aimKeybind:Set(keyboardAimKey); restoringKey = false
+				DiqUI:Notify("Key Conflict", reason, 4, "warning")
+				return
+			end
 			keyboardAimKey = key
-			Aimbot.SetActivationKey(key.Name)
 			aimButtonDropdown:Set("Keyboard")
+		end,
+	})
+	nextKeybind = combatTab:CreateKeybind("Next Target Button", Enum.KeyCode.T, nil, {
+		OnListeningChanged = Aimbot.SetInputSuspended,
+		OnChanged = function(key)
+			if restoringKey then return end
+			local ok, reason = Aimbot.SetNextTargetKey(key.Name)
+			if not ok then
+				restoringKey = true; nextKeybind:Set(Enum.KeyCode[Aimbot.GetNextTargetKey()]); restoringKey = false
+				DiqUI:Notify("Key Conflict", reason, 4, "warning")
+			end
 		end,
 	})
 	combatTab:CreateButton("Diagnose Aimbot", function()
@@ -230,6 +257,9 @@ local function Start()
 	end, { Icon = "circle" })
 
 	combatTab:CreateLabel("TARGET SELECTION")
+	combatTab:CreateToggle("Auto Switch to Better Target", false, function(value)
+		Aimbot.SetAutoSwitch(value)
+	end)
 	local targetModes = {
 		["Balanced: Crosshair + Distance"] = "Balanced",
 		["Closest to Crosshair"] = "Smart",

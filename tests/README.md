@@ -20,12 +20,14 @@ response factors, not real camera rotations or mouse sensitivity.
 
 ## Live acceptance checks
 
-1. Upload Main.lua and AimbotSystem.lua together before testing the remote loader.
+1. Upload Main.lua, AimbotSystem.lua and DiqUILib.lua together before testing the remote loader.
 2. In your own test map with another player, select Camera, enable Aimbot and
    Show FOV Circle, then press Q once to start aiming and again to stop. Camera mode uses the viewport center.
    Aim Activation Mode switches between Toggle and Hold. Aim Button selects
    Keyboard/Right Mouse/Left Mouse; Keyboard Aim Button captures a custom key.
    Changing the key/mode and re-enabling the master switch reset aiming to OFF.
+   Press T while aiming to cycle to the next eligible target; Next Target Button
+   changes that key. Aim and Next Target buttons cannot be the same key.
 3. Toggle aiming off, kill/respawn a target, change teams and move behind a
    wall with Wall Check enabled. The old target must no longer be followed.
 4. Check Mouse mode with both a free cursor and a locked cursor. The FOV follows
@@ -62,8 +64,11 @@ and Keep Current Target. Crosshair Weight affects Balanced only: 100% uses
 crosshair distance alone; 0% uses physical distance alone. All modes retain
 the FOV, health, team, maximum-distance and optional wall filters.
 
-The current target is validated every frame. Other players are compared at
-10 Hz. A challenger must improve the score by more than 20% and at least
+The current target is validated every frame. Auto Switch to Better Target is
+OFF by default: Balanced ranks the initial acquisition, then the controller
+retains that target until it becomes invalid or the user requests another.
+If Auto Switch is ON, other players are compared at 10 Hz.
+A challenger must improve the score by more than 20% and at least
 0.025 Balanced score, 8 pixels in crosshair mode, or 3 studs in nearest mode.
 It must remain best over successive scans for Target Switch Delay (default
 200 ms), so switching may take about 200-300 ms after a challenger appears.
@@ -73,3 +78,16 @@ never switches a still-valid target. Exact-score ties use the lower UserId.
 Regression tests cover combined-score weighting, physical-distance ranking,
 enumeration-independent ties, sustained challengers, near-tie stability,
 interrupted challengers and immediate replacement of dead targets.
+
+Manual selection cycles through a score-sorted snapshot of eligible players.
+That order is retained across presses so camera-induced ranking changes do not
+bounce between two players. Ineligible players are removed and newly eligible
+players are appended in score order. A single candidate stays selected; no
+candidates clears the lock. Manual selection still applies all eligibility
+filters and is blocked while typing, in menus, unfocused, or editing either
+aim keybind. Returning from a keybind edit requires activating aim again.
+
+Additional regressions cover three-player cycling while scores change, cycle
+wrap, manual mode stability, key rebinding/conflicts and cancellation on focus
+loss or input capture. UI hook wiring has been compiled and inspected, but
+interactive keybind behavior still needs a live executor check.
