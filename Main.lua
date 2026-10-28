@@ -65,7 +65,7 @@ local function Start()
 	local DiqIcons = LoadModule("DiqIcons", {  }, true)
 	local Movement = LoadModule("MovementSystem", { "Destroy", "Init", "ResetCharacter", "SetCFrameSpeed", "SetFly", "SetFlySpeed", "SetInfinityJump", "SetNoClip", "SetNoFling", "SetSpeed", "Unanchor" })
 	local ESP = LoadModule("ESPSystem", { "Destroy", "Init", "SetBoxes", "SetEnabled", "SetHealth", "SetHighlights", "SetNames", "SetTracers", "SetUseTeamColor" })
-	local Aimbot = LoadModule("AimbotSystem", { "Destroy", "Init", "SetAimMethod", "SetAimPart", "SetEnabled", "SetFOVRadius", "SetMaxDistance", "SetShowFOV", "SetSmoothing", "SetTeamCheck", "SetWallCheck" })
+	local Aimbot = LoadModule("AimbotSystem", { "Destroy", "GetStatus", "Init", "SetActivationKey", "SetActivationMode", "SetAimMethod", "SetAimPart", "SetEnabled", "SetFOVRadius", "SetMaxDistance", "SetShowFOV", "SetSmoothing", "SetTeamCheck", "SetWallCheck" })
 	local Hitbox = LoadModule("HitboxSystem", { "Destroy", "Init", "SetEnabled", "SetSize", "SetTargetPart", "SetTeamCheck", "SetTransparency" })
 	local Misc = LoadModule("MiscSystem", { "Destroy", "Rejoin", "SetAntiAFK", "SetFullbright" })
 
@@ -191,12 +191,39 @@ local function Start()
 
 	combatTab:CreateLabel("AIMBOT MASTER")
 
-	combatTab:CreateToggle("Enable Aimbot (Hold Right Click)", false, function(state)
+	combatTab:CreateToggle("Enable Aimbot", false, function(state)
 		Aimbot.SetEnabled(state)
 		if state then
-			DiqUI:Notify("Aimbot Enabled", "Hold Right Click to aim at targets", 3, "info")
+			DiqUI:Notify("Aimbot Enabled", "Press Q to start / stop aiming (configurable below)", 3, "info")
 		end
 	end, { Icon = "crosshair" })
+
+	combatTab:CreateDropdown("Aim Activation Mode", { "Toggle", "Hold" }, "Toggle", function(mode)
+		Aimbot.SetActivationMode(mode)
+	end)
+	local keyboardAimKey = Enum.KeyCode.Q
+	local aimButtonDropdown
+	aimButtonDropdown = combatTab:CreateDropdown("Aim Button", { "Keyboard", "Right Mouse", "Left Mouse" }, "Keyboard", function(button)
+		local key = button == "Right Mouse" and "MouseButton2" or (button == "Left Mouse" and "MouseButton1" or keyboardAimKey.Name)
+		Aimbot.SetActivationKey(key)
+	end)
+	combatTab:CreateKeybind("Keyboard Aim Button", Enum.KeyCode.Q, nil, {
+		OnChanged = function(key)
+			keyboardAimKey = key
+			Aimbot.SetActivationKey(key.Name)
+			aimButtonDropdown:Set("Keyboard")
+		end,
+	})
+	combatTab:CreateButton("Diagnose Aimbot", function()
+		local snapshot = Aimbot.GetStatus()
+		local reasons = {}
+		for reason, count in pairs(snapshot.Rejected) do table.insert(reasons, reason .. ": " .. count) end
+		table.sort(reasons)
+		local message = snapshot.Reason .. " | " .. snapshot.Method .. " | " .. snapshot.ActivationMode .. " " .. snapshot.ActivationKey
+		if #reasons > 0 then message = message .. "\n" .. table.concat(reasons, ", ") end
+		print("[Diq] Aim status: " .. message)
+		DiqUI:Notify("Aimbot Diagnostics", message, 6, "info")
+	end)
 
 	combatTab:CreateToggle("Show FOV Circle", false, function(state)
 		Aimbot.SetShowFOV(state)

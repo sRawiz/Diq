@@ -13,7 +13,8 @@ local function signal()
 end
 local vectorMT = {}
 local function vec(x,y,z) return setmetatable({ X=x,Y=y,Z=z or 0 },vectorMT) end
-vectorMT.__index = function(v,k) if k == 'Magnitude' then return math.sqrt(v.X*v.X+v.Y*v.Y+v.Z*v.Z) end end
+vectorMT.__index = function(v,k) if k == 'Magnitude' then return math.sqrt(v.X*v.X+v.Y*v.Y+v.Z*v.Z) end
+ if k == 'Unit' then local m=math.sqrt(v.X*v.X+v.Y*v.Y+v.Z*v.Z); return vec(v.X/m,v.Y/m,v.Z/m) end end
 vectorMT.__add = function(a,b) return vec(a.X+b.X,a.Y+b.Y,a.Z+b.Z) end
 vectorMT.__sub = function(a,b) return vec(a.X-b.X,a.Y-b.Y,a.Z-b.Z) end
 vectorMT.__mul = function(a,b) return vec(a.X*b,a.Y*b,a.Z*b) end
@@ -24,7 +25,7 @@ local UDim = {new=function(...) return {...} end}
 local UDim2 = {fromOffset=vec}
 local Enum = {
  RaycastFilterType={Exclude=1}, MouseBehavior={Default=1,LockCenter=2},
- UserInputType={MouseButton2=2}, RenderPriority={Camera={Value=200}},
+ UserInputType={MouseButton2=2,MouseButton1=1,Keyboard=3}, KeyCode={Q=10,E=11,Unknown=0}, RenderPriority={Camera={Value=200},Last={Value=2000}},
 }
 local instances = {}
 local Instance = { new = function(class)
@@ -34,9 +35,14 @@ local Instance = { new = function(class)
 end }
 local RaycastParams = {new=function() return {} end}
 local function frame(pos,target)
- return {Position=pos,Target=target,Lerp=function(self,other,alpha)
-  local f=frame(self.Position,other.Target); f.Alpha=alpha; return f
- end}
+ local f={Position=pos,Target=target,LookVector=target and (target-pos).Unit or vec(0,0,1)}
+ function f:Lerp(other,alpha)
+  local result=frame(self.Position,other.Target)
+  result.Alpha=alpha
+  result.LookVector=(self.LookVector*(1-alpha)+other.LookVector*alpha).Unit
+  return result
+ end
+ return f
 end
 local CFrame = {lookAt=frame}
 local LocalPlayer = {Neutral=false,Team='blue',CharacterAdded=signal()}
@@ -68,8 +74,8 @@ local function character(x,y)
 end
 LocalPlayer.Character=character(0,0)
 function LocalPlayer:FindFirstChildOfClass() return {} end
-local enemy={Parent=Players,Team='red',Neutral=false,Character=character(430,300)}
-local other={Parent=Players,Team='red',Neutral=false,Character=character(450,300)}
+local enemy={Name='Enemy',Parent=Players,Team='red',Neutral=false,Character=character(430,300)}
+local other={Name='Other',Parent=Players,Team='red',Neutral=false,Character=character(450,300)}
 Players.list={LocalPlayer,enemy,other}
 local game = {GetService=function(_,name) return ({Players=Players,RunService=RunService,UserInputService=Input,GuiService=GuiService})[name] end}
 local warnings={}
@@ -85,6 +91,7 @@ assert(#Input.InputBegan.listeners==1,'Init must be idempotent')
 local function tick(dt) for _,fn in pairs(RunService.bindings) do fn(dt or 1/60) end end
 local function press() Input.InputBegan:Fire({UserInputType=2},false) end
 local function target(expected,label) tick(); assert(A.GetCurrentTarget()==expected,label) end
+A.SetActivationKey('MouseButton2'); A.SetActivationMode('Hold')
 A.SetEnabled(true); A.SetShowFOV(true); press()
 target(enemy.Character.Head,'closest target')
 -- Compare the actual controller's per-frame response over one second.
@@ -144,6 +151,35 @@ A.SetTeamCheck(true); tick()
 assert(moves[#moves].X>0,'locked mouse uses viewport center')
 mousemoverel=function() error('executor failure') end
 tick(); assert(A.GetAimMethod()=='Camera' and #warnings==1,'mouse failure recovers explicitly')
+-- Reproduce the game's camera restoring its own orientation every frame.
+A.SetAimMethod('Camera'); A.SetAimPart('Head')
+Input.InputEnded:Fire({UserInputType=2}); press()
+camera.CFrame=frame(vec(0,0,0)); tick()
+local firstDirection=camera.CFrame.LookVector
+local desiredDirection=A.GetCurrentTarget().Position.Unit
+camera.CFrame=frame(vec(0,0,0)); tick()
+assert((camera.CFrame.LookVector-desiredDirection).Magnitude < (firstDirection-desiredDirection).Magnitude,'camera smoothing must accumulate despite game resets')
+-- The default Q toggle must not require holding right click.
+A.SetActivationKey('Q'); A.SetActivationMode('Toggle')
+Input.InputBegan:Fire({UserInputType=3,KeyCode=10},false); tick()
+assert(A.IsAiming() and A.GetStatus().Active,'Q enables aiming')
+Input.InputEnded:Fire({UserInputType=3,KeyCode=10}); tick()
+assert(A.IsAiming(),'Q release preserves toggle')
+Input.InputBegan:Fire({UserInputType=3,KeyCode=10},false); target(nil,'second Q stops aiming')
+Input.InputBegan:Fire({UserInputType=3,KeyCode=10},true); tick()
+assert(not A.GetStatus().Active,'processed keys must not toggle')
+A.SetActivationMode('Hold')
+Input.InputBegan:Fire({UserInputType=3,KeyCode=10},false); tick(); assert(A.IsAiming(),'keyboard hold starts')
+Input.InputEnded:Fire({UserInputType=3,KeyCode=10}); target(nil,'keyboard release stops hold')
+A.SetActivationKey('E'); A.SetActivationMode('Toggle')
+Input.InputBegan:Fire({UserInputType=3,KeyCode=10},false); tick(); assert(not A.GetStatus().Active,'old key no longer toggles')
+Input.InputBegan:Fire({UserInputType=3,KeyCode=11},false); tick(); assert(A.GetStatus().Active,'new key toggles')
+A.SetEnabled(false); A.SetEnabled(true); tick(); assert(not A.GetStatus().Active,'master re-enable starts inactive')
+-- Diagnostics expose the actual filters instead of guessing at the game.
+A.SetActivationKey('MouseButton2'); A.SetActivationMode('Hold'); press()
+enemy.Team='blue'; other.Team='blue'; tick()
+assert(A.GetStatus().Rejected['Same team']==2 and not A.IsAiming(),'same-team diagnostic')
+enemy.Team='red'; other.Team='red'
 A.SetEnabled(false); assert(next(RunService.bindings)==nil and not overlay.Visible,'disable unbinds and hides FOV')
 assert(not pcall(A.SetSmoothing,0/0),'reject NaN')
 A.SetEnabled(true); press()
