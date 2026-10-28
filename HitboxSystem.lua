@@ -1,3 +1,7 @@
+local ModuleOptions = ...
+local initialized = false
+local destroyed = false
+
 local HitboxSystem = {}
 
 -- ==========================================
@@ -123,9 +127,9 @@ local function OnStepped()
 end
 
 local function HandleCharacterAdded(player)
-	player.CharacterAdded:Connect(function(char)
+	Connections[player] = player.CharacterAdded:Connect(function(char)
 		task.delay(CHARACTER_LOAD_DELAY, function()
-			if player.Character == char and char:FindFirstChild("HumanoidRootPart") and char:FindFirstChild("Head") then
+			if not destroyed and player.Character == char and char:FindFirstChild("HumanoidRootPart") and char:FindFirstChild("Head") then
 				OriginalProperties[player] = SaveOriginal(char)
 			end
 		end)
@@ -152,6 +156,8 @@ local function Initialize()
 
 	Connections.PlayerRemoving = Players.PlayerRemoving:Connect(function(player)
 		OriginalProperties[player] = nil
+		if Connections[player] then Connections[player]:Disconnect() end
+		Connections[player] = nil
 	end)
 
 	Connections.Stepped = RunService.Stepped:Connect(OnStepped)
@@ -159,6 +165,8 @@ end
 
 --- ทำลายทุกอย่าง ป้องกัน leak เมื่อ execute ซ้ำ
 function HitboxSystem.Destroy()
+	if destroyed then return end
+	destroyed = true
 	-- คืนค่าเดิมก่อนปิด
 	RevertAllHitboxes()
 
@@ -213,6 +221,16 @@ end
 -- ==========================================
 -- Boot
 -- ==========================================
-Initialize()
+function HitboxSystem.Init()
+	if destroyed then error("[Diq] Cannot initialize a destroyed module") end
+	if initialized then return end
+	initialized = true
+	Initialize()
+end
+
+-- Keep direct module execution compatible; Main explicitly defers initialization.
+if type(ModuleOptions) ~= "table" or not ModuleOptions.DeferInit then
+	HitboxSystem.Init()
+end
 
 return HitboxSystem

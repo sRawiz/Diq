@@ -1,3 +1,7 @@
+local ModuleOptions = ...
+local initialized = false
+local destroyed = false
+
 -- ==========================================
 -- ⚙️ Module: Movement System v3.0 (Refactored)
 -- ==========================================
@@ -165,6 +169,8 @@ end
 
 --- ทำลายทุกอย่าง ป้องกัน leak เมื่อ execute ซ้ำ
 function Movement.Destroy()
+	if destroyed then return end
+	destroyed = true
 	-- คืนค่า Fly state
 	if State.IsFlying then
 		local _, humanoid = GetCharacterData()
@@ -322,6 +328,16 @@ end
 -- ==========================================
 -- Boot
 -- ==========================================
-Initialize()
+function Movement.Init()
+	if destroyed then error("[Diq] Cannot initialize a destroyed module") end
+	if initialized then return end
+	initialized = true
+	Initialize()
+end
+
+-- Keep direct module execution compatible; Main explicitly defers initialization.
+if type(ModuleOptions) ~= "table" or not ModuleOptions.DeferInit then
+	Movement.Init()
+end
 
 return Movement

@@ -304,6 +304,7 @@ end
 
 -- เก็บ tracker ระดับ module เพื่อ cleanup ตอนสร้าง window ใหม่
 local _activeTracker = nil
+local _activeScreenGui = nil
 
 function Diq:CreateWindow(config)
 	-- รองรับทั้ง string และ table
@@ -311,6 +312,7 @@ function Diq:CreateWindow(config)
 		config = { Title = config }
 	end
 	config = config or {}
+	local destroyed = false
 
 	local windowTitle = config.Title or "Diq Panel"
 	local windowSize  = config.Size or UDim2.new(0, 520, 0, 380)
@@ -359,6 +361,7 @@ function Diq:CreateWindow(config)
 	-- ScreenGui
 	-- ==========================================
 	local ScreenGui = Instance.new("ScreenGui")
+	_activeScreenGui = ScreenGui
 	ScreenGui.Name = "Diq_UI"
 	ScreenGui.ResetOnSpawn = false
 	ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -1628,14 +1631,12 @@ function Diq:CreateWindow(config)
 	-- ปุ่ม Close — ปิดหน้าต่าง + cleanup ทุก connection
 	-- ==========================================
 	connections:Track(CloseBtn.MouseButton1Click:Connect(function()
-		local tw = Tween(MainFrame, 0.3, {
-			Size = UDim2.new(0, 0, 0, 0),
-		}, Enum.EasingStyle.Back, Enum.EasingDirection.In)
-		tw.Completed:Once(function()
-			connections:DisconnectAll()
-			_activeTracker = nil
-			ScreenGui:Destroy()
-		end)
+		if destroyed then return end
+		if type(config.OnClose) == "function" then
+			config.OnClose()
+		else
+			Window:Destroy()
+		end
 	end))
 
 	-- ==========================================
@@ -1668,8 +1669,11 @@ function Diq:CreateWindow(config)
 	end
 
 	function Window:Destroy()
+		if destroyed then return end
+		destroyed = true
 		connections:DisconnectAll()
-		_activeTracker = nil
+		if _activeTracker == connections then _activeTracker = nil end
+		if _activeScreenGui == ScreenGui then _activeScreenGui = nil end
 		if ScreenGui then ScreenGui:Destroy() end
 	end
 
@@ -1684,6 +1688,10 @@ end
 
 --- ทำลาย module ระดับบน (NotificationHolder, active tracker)
 function Diq:Destroy()
+	if _activeScreenGui then
+		_activeScreenGui:Destroy()
+		_activeScreenGui = nil
+	end
 	if _activeTracker then
 		_activeTracker:DisconnectAll()
 		_activeTracker = nil

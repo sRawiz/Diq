@@ -1,3 +1,7 @@
+local ModuleOptions = ...
+local initialized = false
+local destroyed = false
+
 local ESPSystem = {}
 
 -- ==========================================
@@ -303,6 +307,8 @@ end
 
 --- ทำลายทุกอย่าง ป้องกัน leak เมื่อ execute ซ้ำ
 function ESPSystem.Destroy()
+	if destroyed then return end
+	destroyed = true
 	for _, connection in Connections do
 		if connection and connection.Connected then
 			connection:Disconnect()
@@ -362,6 +368,16 @@ end
 -- ==========================================
 -- Boot
 -- ==========================================
-Initialize()
+function ESPSystem.Init()
+	if destroyed then error("[Diq] Cannot initialize a destroyed module") end
+	if initialized then return end
+	initialized = true
+	Initialize()
+end
+
+-- Keep direct module execution compatible; Main explicitly defers initialization.
+if type(ModuleOptions) ~= "table" or not ModuleOptions.DeferInit then
+	ESPSystem.Init()
+end
 
 return ESPSystem

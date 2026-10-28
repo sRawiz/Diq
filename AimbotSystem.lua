@@ -1,3 +1,7 @@
+local ModuleOptions = ...
+local initialized = false
+local destroyed = false
+
 local AimbotSystem = {}
 
 -- ==========================================
@@ -297,6 +301,8 @@ end
 
 --- ทำลายทุกอย่าง ป้องกัน leak เมื่อ execute ซ้ำ
 function AimbotSystem.Destroy()
+	if destroyed then return end
+	destroyed = true
 	-- Disconnect ทุก connection
 	for name, connection in Connections do
 		if connection and connection.Connected then
@@ -369,6 +375,16 @@ end
 -- ==========================================
 -- Boot
 -- ==========================================
-Initialize()
+function AimbotSystem.Init()
+	if destroyed then error("[Diq] Cannot initialize a destroyed module") end
+	if initialized then return end
+	initialized = true
+	Initialize()
+end
+
+-- Keep direct module execution compatible; Main explicitly defers initialization.
+if type(ModuleOptions) ~= "table" or not ModuleOptions.DeferInit then
+	AimbotSystem.Init()
+end
 
 return AimbotSystem
