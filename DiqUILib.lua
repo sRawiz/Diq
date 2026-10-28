@@ -1146,7 +1146,7 @@ function Diq:CreateWindow(config)
 				if callback then task.spawn(callback, toggled) end
 			end))
 
-			function obj:Set(v) toggled = v; UpdateVisual(); if callback then task.spawn(callback, toggled) end end
+			function obj:Set(v, silent) toggled = v; UpdateVisual(); if callback and not silent then task.spawn(callback, toggled) end end
 			function obj:Get() return toggled end
 			function obj:Reset() obj:Set(default or false) end
 			function obj:SetText(t) lbl.Text = t end

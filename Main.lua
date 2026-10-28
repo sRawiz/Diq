@@ -65,7 +65,7 @@ local function Start()
 	local DiqIcons = LoadModule("DiqIcons", {  }, true)
 	local Movement = LoadModule("MovementSystem", { "Destroy", "Init", "ResetCharacter", "SetCFrameSpeed", "SetFly", "SetFlySpeed", "SetInfinityJump", "SetNoClip", "SetNoFling", "SetSpeed", "Unanchor" })
 	local ESP = LoadModule("ESPSystem", { "Destroy", "Init", "SetBoxes", "SetEnabled", "SetHealth", "SetHighlights", "SetNames", "SetTracers", "SetUseTeamColor" })
-	local Aimbot = LoadModule("AimbotSystem", { "Destroy", "GetStatus", "Init", "SetActivationKey", "SetActivationMode", "SetAimMethod", "SetAimPart", "SetEnabled", "SetFOVRadius", "SetMaxDistance", "SetShowFOV", "SetSmoothing", "SetTeamCheck", "SetTargetMode", "SetCrosshairWeight", "SetSwitchDelay", "SetAutoSwitch", "SetInputSuspended", "SetNextTargetKey", "GetNextTargetKey", "GetActivationKey", "SetWallCheck" })
+	local Aimbot = LoadModule("AimbotSystem", { "Destroy", "Init", "ApplyAssistPreset", "SetEnabledListener", "SetEnabled", "SetAimPart", "SetFOVRadius", "SetShowFOV" })
 	local Hitbox = LoadModule("HitboxSystem", { "Destroy", "Init", "SetEnabled", "SetSize", "SetTargetPart", "SetTeamCheck", "SetTransparency" })
 	local Misc = LoadModule("MiscSystem", { "Destroy", "Rejoin", "SetAntiAFK", "SetFullbright" })
 
@@ -187,122 +187,28 @@ local function Start()
 	-- ==========================================
 	-- 🎯 Tab: Combat (ใช้ Lucide icon "crosshair")
 	-- ==========================================
-	local combatTab = MyWindow:CreateTab("Combat", "crosshair")
+	local aimTab = MyWindow:CreateTab("Aim Assist", "crosshair")
 
-	combatTab:CreateLabel("AIMBOT MASTER")
-
-	combatTab:CreateToggle("Enable Aimbot", false, function(state)
-		Aimbot.SetEnabled(state)
-		if state then
-			DiqUI:Notify("Aimbot Enabled", "Q: start / stop aiming. T: next target. Buttons configurable below.", 3, "info")
-		end
+	aimTab:CreateLabel("AIM ASSIST")
+	Aimbot.ApplyAssistPreset()
+	local aimAssistToggle = aimTab:CreateToggle("Aim Assist [Q]", false, function(enabled)
+		Aimbot.SetEnabled(enabled)
 	end, { Icon = "crosshair" })
-
-	combatTab:CreateDropdown("Aim Activation Mode", { "Toggle", "Hold" }, "Toggle", function(mode)
-		Aimbot.SetActivationMode(mode)
+	Aimbot.SetEnabledListener(function(enabled)
+		aimAssistToggle:Set(enabled, true)
 	end)
-	local keyboardAimKey = Enum.KeyCode.Q
-	local aimButtonDropdown
-	local selectedAimButton = "Keyboard"
-	aimButtonDropdown = combatTab:CreateDropdown("Aim Button", { "Keyboard", "Right Mouse", "Left Mouse" }, "Keyboard", function(button)
-		local key = button == "Right Mouse" and "MouseButton2" or (button == "Left Mouse" and "MouseButton1" or keyboardAimKey.Name)
-		local ok, reason = Aimbot.SetActivationKey(key)
-		if not ok then
-			aimButtonDropdown:Set(selectedAimButton)
-			DiqUI:Notify("Key Conflict", reason, 4, "warning")
-		else
-			selectedAimButton = button
-		end
+	aimTab:CreateDropdown("Aim At", { "Head", "Body" }, "Head", function(part)
+		Aimbot.SetAimPart(part)
 	end)
-	local aimKeybind, nextKeybind
-	local restoringKey = false
-	aimKeybind = combatTab:CreateKeybind("Keyboard Aim Button", Enum.KeyCode.Q, nil, {
-		OnListeningChanged = Aimbot.SetInputSuspended,
-		OnChanged = function(key)
-			if restoringKey then return end
-			local ok, reason = Aimbot.SetActivationKey(key.Name)
-			if not ok then
-				restoringKey = true; aimKeybind:Set(keyboardAimKey); restoringKey = false
-				DiqUI:Notify("Key Conflict", reason, 4, "warning")
-				return
-			end
-			keyboardAimKey = key
-			aimButtonDropdown:Set("Keyboard")
-		end,
-	})
-	nextKeybind = combatTab:CreateKeybind("Next Target Button", Enum.KeyCode.T, nil, {
-		OnListeningChanged = Aimbot.SetInputSuspended,
-		OnChanged = function(key)
-			if restoringKey then return end
-			local ok, reason = Aimbot.SetNextTargetKey(key.Name)
-			if not ok then
-				restoringKey = true; nextKeybind:Set(Enum.KeyCode[Aimbot.GetNextTargetKey()]); restoringKey = false
-				DiqUI:Notify("Key Conflict", reason, 4, "warning")
-			end
-		end,
-	})
-	combatTab:CreateButton("Diagnose Aimbot", function()
-		local snapshot = Aimbot.GetStatus()
-		local reasons = {}
-		for reason, count in pairs(snapshot.Rejected) do table.insert(reasons, reason .. ": " .. count) end
-		table.sort(reasons)
-		local message = snapshot.Reason .. " | " .. snapshot.Method .. " | " .. snapshot.TargetMode .. " | " .. snapshot.ActivationMode .. " " .. snapshot.ActivationKey
-		if #reasons > 0 then message = message .. "\n" .. table.concat(reasons, ", ") end
-		print("[Diq] Aim status: " .. message)
-		DiqUI:Notify("Aimbot Diagnostics", message, 6, "info")
+	aimTab:CreateSlider("FOV Radius", 20, 400, 150, function(radius)
+		Aimbot.SetFOVRadius(radius)
 	end)
-
-	combatTab:CreateToggle("Show FOV Circle", false, function(state)
-		Aimbot.SetShowFOV(state)
+	aimTab:CreateToggle("Show FOV", true, function(visible)
+		Aimbot.SetShowFOV(visible)
 	end, { Icon = "circle" })
+	aimTab:CreateLabel("Q: on/off | Visible opponents only")
 
-	combatTab:CreateLabel("TARGET SELECTION")
-	combatTab:CreateToggle("Auto Switch to Better Target", false, function(value)
-		Aimbot.SetAutoSwitch(value)
-	end)
-	local targetModes = {
-		["Balanced: Crosshair + Distance"] = "Balanced",
-		["Closest to Crosshair"] = "Smart",
-		["Closest Player"] = "Nearest",
-		["Keep Current Target"] = "Sticky",
-	}
-	combatTab:CreateDropdown("Target Priority", { "Balanced: Crosshair + Distance", "Closest to Crosshair", "Closest Player", "Keep Current Target" }, "Balanced: Crosshair + Distance", function(choice)
-		Aimbot.SetTargetMode(targetModes[choice])
-	end)
-	combatTab:CreateSlider("Balanced: Crosshair Weight (%)", 0, 100, 70, function(value)
-		Aimbot.SetCrosshairWeight(value / 100)
-	end)
-	combatTab:CreateSlider("Target Switch Delay (ms)", 100, 1000, 200, function(value)
-		Aimbot.SetSwitchDelay(value / 1000)
-	end)
-
-	combatTab:CreateLabel("AIMBOT SETTINGS")
-
-	combatTab:CreateSlider("FOV Size", 10, 800, 150, function(value)
-		Aimbot.SetFOVRadius(value)
-	end)
-
-	combatTab:CreateSlider("Aim Response (Higher = Faster)", 1, 100, 50, function(value)
-	    -- Map 1-100 to 0.01-1
-		Aimbot.SetSmoothing(value / 100)
-	end)
-
-	combatTab:CreateDropdown("Aim Part", { "Head", "Torso", "HumanoidRootPart" }, "Head", function(selected)
-		Aimbot.SetAimPart(selected)
-	end)
-
-	local aimMethodDropdown
-	aimMethodDropdown = combatTab:CreateDropdown("Aim Method", { "Camera", "Mouse" }, "Camera", function(selected)
-		local ok, reason = Aimbot.SetAimMethod(selected)
-		if not ok then
-			aimMethodDropdown:Set(Aimbot.GetAimMethod())
-			DiqUI:Notify("Aim Method Unavailable", reason, 4, "warning")
-		end
-	end)
-	combatTab:CreateSlider("Max Aim Distance (studs)", 100, 10000, 3000, function(value)
-		Aimbot.SetMaxDistance(value)
-	end)
-
+	local combatTab = MyWindow:CreateTab("Combat", "shield")
 	combatTab:CreateLabel("HITBOX EXPANDER")
 
 	combatTab:CreateToggle("Enable Hitbox Expander", false, function(state)
@@ -327,14 +233,11 @@ local function Start()
 
 	combatTab:CreateLabel("CHECKS")
 
-	combatTab:CreateToggle("Team Check", true, function(state)
-		Aimbot.SetTeamCheck(state)
+	combatTab:CreateToggle("Hitbox Team Check", true, function(state)
 		Hitbox.SetTeamCheck(state)
 	end, { Icon = "users" })
 
-	combatTab:CreateToggle("Wall Check (Visible Only)", false, function(state)
-		Aimbot.SetWallCheck(state)
-	end, { Icon = "eye-off" })
+
 
 	-- ==========================================
 	-- 👁️ Tab: Visuals (ใช้ Lucide icon "eye")

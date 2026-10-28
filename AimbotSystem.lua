@@ -17,6 +17,8 @@ local Config = {
 	AutoSwitch = false, NextTargetKey = "T",
 }
 local initialized, destroyed, bound = false, false, false
+local simpleControls = false
+local enabledListener = nil
 local focused, held, aiming = true, false, false
 local currentPlayer, currentPart
 local nextRequested = false
@@ -38,6 +40,10 @@ rayParams.IgnoreWater = true
 local function updateStatusLabel()
 	if statusLabel then
 		statusLabel.Visible = Config.Enabled
+		if simpleControls then
+			statusLabel.Text = "Aim Assist [Q] | " .. status
+			return
+		end
 		local activation = Config.ActivationMode .. " " .. Config.ActivationKey .. ": " .. (held and "ON" or "OFF")
 		statusLabel.Text = "Diq Aim | " .. activation .. " | " .. Config.TargetMode .. " | Next: " .. Config.NextTargetKey .. " | " .. status
 	end
@@ -67,12 +73,20 @@ local function getOrigin(camera, inset)
 end
 
 local function getPart(character)
-	local part = character:FindFirstChild(Config.AimPart)
-	if not part and Config.AimPart == "Torso" then
-		part = character:FindFirstChild("UpperTorso") or character:FindFirstChild("LowerTorso")
+	local names
+	if Config.AimPart == "Body" or Config.AimPart == "Torso" then
+		names = { "UpperTorso", "Torso", "LowerTorso", "HumanoidRootPart" }
+	elseif Config.AimPart == "Head" then
+		names = { "Head", "UpperTorso", "Torso", "HumanoidRootPart" }
+	else
+		names = { "HumanoidRootPart", "UpperTorso", "Torso" }
 	end
-	part = part or character:FindFirstChild("HumanoidRootPart")
-	return part and part:IsA("BasePart") and part or nil
+	for _, name in ipairs(names) do
+		local part = character:FindFirstChild(name)
+		if part and part:IsA("BasePart") then return part end
+	end
+	local primary = character.PrimaryPart
+	return primary and primary:IsA("BasePart") and primary or nil
 end
 
 -- Revalidate the owner as well as the part: respawn, team swaps, death and
@@ -278,12 +292,21 @@ local function step(dt)
 	aiming = true
 	-- Higher response means faster convergence. Exponential response is stable
 	-- across frame rates; the same factor is used by both output backends.
-	local alpha = 1 - math.exp(-(2 + 38 * Config.Smoothing) * math.clamp(dt, 0, 0.1))
+	local response = 2 + 38 * Config.Smoothing
+	if simpleControls then
+		-- Ease in near the FOV edge; keep correction strongest near the reticle.
+		local proximity = 1 - math.clamp((point - origin).Magnitude / Config.FOVRadius, 0, 1)
+		response = response * (0.25 + 0.75 * proximity * proximity)
+	end
+	local alpha = 1 - math.exp(-response * math.clamp(dt, 0, 0.1))
 	if Config.AimMethod == "Camera" then
 		local desired = CFrame.lookAt(camera.CFrame.Position, part.Position)
 		-- Continue from our previous orientation even if the game's camera
 		-- controller resets its orientation before this callback every frame.
-		local start = lastAimDirection and CFrame.lookAt(camera.CFrame.Position, camera.CFrame.Position + lastAimDirection) or camera.CFrame
+		local start = camera.CFrame
+		if not simpleControls and lastAimDirection then
+			start = CFrame.lookAt(camera.CFrame.Position, camera.CFrame.Position + lastAimDirection)
+		end
 		camera.CFrame = start:Lerp(desired, alpha)
 		lastAimDirection = camera.CFrame.LookVector
 	else
@@ -303,7 +326,7 @@ local function updateBinding()
 		RunService:BindToRenderStep(bindingName, Enum.RenderPriority.Last.Value + 1, function(dt)
 			local ok, err = pcall(step, dt)
 			if not ok then
-				Config.Enabled = false
+				AimbotSystem.SetEnabled(false)
 				status = "Runtime error: " .. tostring(err)
 				releaseTarget()
 				if fovFrame then fovFrame.Visible = false end
@@ -326,7 +349,12 @@ function AimbotSystem.Init()
 	local ok, err = pcall(function()
 		createOverlay()
 		table.insert(connections, Input.InputBegan:Connect(function(input, processed)
-			if inputSuspended or not Config.Enabled or processed or not focused or GuiService.MenuIsOpen or Input:GetFocusedTextBox() ~= nil then return end
+			if inputSuspended or processed or not focused or GuiService.MenuIsOpen or Input:GetFocusedTextBox() ~= nil then return end
+			if simpleControls then
+				if matchesActivation(input) then AimbotSystem.SetEnabled(not Config.Enabled) end
+				return
+			end
+			if not Config.Enabled then return end
 			if input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode == Enum.KeyCode[Config.NextTargetKey] then
 				AimbotSystem.NextTarget()
 				return
@@ -339,9 +367,15 @@ function AimbotSystem.Init()
 		table.insert(connections, Input.InputEnded:Connect(function(input)
 			if Config.ActivationMode == "Hold" and matchesActivation(input) then held = false; releaseTarget() end
 		end))
-		table.insert(connections, Input.WindowFocusReleased:Connect(function() focused = false; held = false; releaseTarget() end))
+		table.insert(connections, Input.WindowFocusReleased:Connect(function()
+			focused = false; held = false; releaseTarget()
+			if simpleControls then AimbotSystem.SetEnabled(false) end
+		end))
 		table.insert(connections, Input.WindowFocused:Connect(function() focused = true end))
-		table.insert(connections, LocalPlayer.CharacterAdded:Connect(function() held = false; releaseTarget() end))
+		table.insert(connections, LocalPlayer.CharacterAdded:Connect(function()
+			held = false; releaseTarget()
+			if simpleControls then AimbotSystem.SetEnabled(false) end
+		end))
 		updateBinding()
 	end)
 	if not ok then AimbotSystem.Destroy(); error(err, 0) end
@@ -350,6 +384,7 @@ end
 function AimbotSystem.Destroy()
 	if destroyed then return end
 	destroyed = true
+	enabledListener = nil
 	Config.Enabled, held = false, false
 	releaseTarget()
 	updateBinding()
@@ -362,12 +397,34 @@ end
 function AimbotSystem.SetEnabled(value)
 	if destroyed then return false end
 	Config.Enabled = value == true
-	held = false
-	status = Config.Enabled and "Waiting for " .. Config.ActivationKey or "Disabled"
+	held = simpleControls and Config.Enabled
+	status = held and "Searching" or (Config.Enabled and "Waiting for " .. Config.ActivationKey or "Disabled")
 	releaseTarget()
 	if not Config.Enabled and fovFrame then fovFrame.Visible = false end
 	updateBinding()
+	if enabledListener then
+		local ok, err = pcall(enabledListener, Config.Enabled)
+		if not ok then warn("[Diq] Aim UI update failed: " .. tostring(err)) end
+	end
 	return true
+end
+
+function AimbotSystem.SetEnabledListener(callback)
+	assert(callback == nil or type(callback) == "function", "Expected callback")
+	enabledListener = callback
+end
+
+function AimbotSystem.ApplyAssistPreset()
+	if destroyed then return false end
+	Config.AimMethod = "Camera"
+	Config.ActivationKey, Config.ActivationMode = "Q", "Toggle"
+	Config.AimPart, Config.FOVRadius, Config.ShowFOV = "Head", 150, true
+	Config.WallCheck, Config.TeamCheck = true, true
+	Config.TargetMode, Config.CrosshairWeight = "Balanced", 0.7
+	Config.AutoSwitch, Config.SwitchDelay = true, 0.25
+	Config.MaxDistance, Config.Smoothing = 3000, 0.35
+	simpleControls = true
+	return AimbotSystem.SetEnabled(false)
 end
 function AimbotSystem.SetActivationKey(key)
 	assert(type(key) == "string" and (key == "MouseButton1" or key == "MouseButton2"
@@ -457,7 +514,7 @@ function AimbotSystem.SetFOVColor(value) assert(typeof(value) == "Color3", "Expe
 function AimbotSystem.SetSmoothing(value) Config.Smoothing = finite(value, "Aim response", 0.01, 1) end
 function AimbotSystem.SetMaxDistance(value) Config.MaxDistance = finite(value, "Max distance", 1, 10000); releaseTarget() end
 function AimbotSystem.SetAimPart(value)
-	assert(value == "Head" or value == "Torso" or value == "HumanoidRootPart", "Unsupported aim part")
+	assert(value == "Head" or value == "Body" or value == "Torso" or value == "HumanoidRootPart", "Unsupported aim part")
 	Config.AimPart = value
 	releaseTarget()
 end

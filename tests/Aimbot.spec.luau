@@ -272,6 +272,61 @@ enemy.Team='red'; other.Team='red'
 A.SetEnabled(false); assert(next(RunService.bindings)==nil and not overlay.Visible,'disable unbinds and hides FOV')
 assert(not pcall(A.SetSmoothing,0/0),'reject NaN')
 A.SetEnabled(true); press()
+-- Simple preset: one enabled state drives the UI toggle and Q shortcut.
+A.ApplyAssistPreset()
+local notified={}
+A.SetEnabledListener(function(value) table.insert(notified,value) end)
+assert(not A.IsEnabled() and A.GetConfig().WallCheck and A.GetAutoSwitch(),'simple preset supplies automatic defaults')
+A.SetInputSuspended(false); workspace.hit=nil
+Players.list={LocalPlayer,enemy,other}; enemy.Team='red'; other.Team='red'
+enemy.Character.Head.Position=vec(430,300,10); other.Character.Head.Position=vec(450,300,10)
+Input.InputBegan:Fire({UserInputType=3,KeyCode=10},false)
+target(enemy.Character.Head,'Q directly enables simple assist without master switch')
+assert(A.IsEnabled() and notified[#notified]==true,'Q synchronizes toggle')
+Input.InputEnded:Fire({UserInputType=3,KeyCode=10})
+target(enemy.Character.Head,'simple Q release remains active')
+Input.InputBegan:Fire({UserInputType=3,KeyCode=10},false)
+assert(not A.IsEnabled() and notified[#notified]==false,'second Q directly disables')
+A.SetEnabled(true)
+target(enemy.Character.Head,'UI enable immediately starts assisting')
+Input.InputBegan:Fire({UserInputType=3,KeyCode=12},false)
+target(enemy.Character.Head,'simple preset ignores legacy next-target shortcut')
+-- Body prefers a real torso over HRP and handles R6, R15 and missing limbs.
+A.SetAimPart('Body')
+local r15=character(420,300); r15.UpperTorso=r15.Head; r15.Head=nil
+enemy.Character=r15
+target(r15.UpperTorso,'Body selects R15 UpperTorso')
+local r6=character(420,300); r6.Torso=r6.Head; r6.Head=nil
+enemy.Character=r6
+target(r6.Torso,'Body selects R6 Torso')
+r6.Torso={IsA=function() return false end}
+target(r6.HumanoidRootPart,'non-part torso falls back safely')
+local fallback=r6.HumanoidRootPart; r6.HumanoidRootPart=nil; r6.PrimaryPart=fallback
+target(fallback,'custom root fallback uses model PrimaryPart')
+-- Soft correction uses the player's present orientation, not a stale forced lock.
+enemy.Character=character(430,300); A.SetAimPart('Head')
+camera.CFrame=frame(vec(0,0,0)); tick()
+local softFirst=camera.CFrame.LookVector
+camera.CFrame=frame(vec(0,0,0)); tick()
+assert((camera.CFrame.LookVector-softFirst).Magnitude<1e-9,'simple assist honors current camera orientation each frame')
+local centralAlpha=camera.CFrame.Alpha
+other.Character.humanoid.Health=0
+enemy.Character.Head.Position=vec(545,300,10); tick()
+assert(camera.CFrame.Alpha<centralAlpha,'assist eases in near FOV boundary')
+workspace.hit={Instance={IsDescendantOf=function() return false end}}
+target(nil,'simple preset always rejects occluded targets')
+workspace.hit=nil; other.Character.humanoid.Health=100
+Input.WindowFocusReleased:Fire()
+assert(not A.IsEnabled() and notified[#notified]==false,'focus loss disables and synchronizes UI')
+Input.WindowFocused:Fire()
+assert(not A.IsEnabled(),'focus regain does not silently re-enable')
+Input.InputBegan:Fire({UserInputType=3,KeyCode=10},true)
+assert(not A.IsEnabled(),'processed Q cannot enable assist')
+Input.textbox={}; Input.InputBegan:Fire({UserInputType=3,KeyCode=10},false)
+assert(not A.IsEnabled(),'typing cannot enable assist'); Input.textbox=nil
+A.SetEnabled(true); LocalPlayer.CharacterAdded:Fire()
+assert(not A.IsEnabled() and notified[#notified]==false,'respawn synchronizes simple state')
+A.SetEnabled(true)
 A.Destroy(); A.Destroy()
 assert(next(RunService.bindings)==nil and A.GetCurrentTarget()==nil,'destroy removes binding and lock')
 for _,sig in ipairs({Input.InputBegan,Input.InputEnded,Input.WindowFocusReleased,Input.WindowFocused,LocalPlayer.CharacterAdded}) do
