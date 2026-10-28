@@ -313,10 +313,11 @@ function Diq:CreateWindow(config)
 	end
 	config = config or {}
 	local destroyed = false
+	local keyCaptureOwner = nil
 
 	local windowTitle = config.Title or "Diq Panel"
 	local windowSize  = config.Size or UDim2.new(0, 520, 0, 380)
-	local toggleKey   = config.ToggleKey or Enum.KeyCode.RightShift
+	local toggleKey   = config.ToggleKey or Enum.KeyCode.K
 
 	local Window = {}
 	
@@ -1531,7 +1532,8 @@ function Diq:CreateWindow(config)
 		-- ======================================
 		-- ⌨️ CreateKeybind — ตั้งค่าปุ่มลัด
 		-- ======================================
-		function Tab:CreateKeybind(text, default, callback)
+		function Tab:CreateKeybind(text, default, callback, options)
+			options = options or {}
 			local obj = {}
 			local currentKey = default or Enum.KeyCode.Unknown
 			local listening = false
@@ -1569,7 +1571,8 @@ function Diq:CreateWindow(config)
 			local kbStroke = ApplyStroke(keyBtn, Theme.Outline)
 
 			connections:Track(keyBtn.MouseButton1Click:Connect(function()
-				if listening then return end
+				if listening or keyCaptureOwner then return end
+				keyCaptureOwner = frame
 				listening = true
 				keyBtn.Text = "..."
 				Tween(kbStroke, 0.2, { Color = Theme.Accent })
@@ -1577,20 +1580,24 @@ function Diq:CreateWindow(config)
 
 			connections:Track(UserInputService.InputBegan:Connect(function(input, gameProcessed)
 				if listening then
-					if input.UserInputType == Enum.UserInputType.Keyboard then
+					if input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode ~= Enum.KeyCode.Unknown then
 						if input.KeyCode == Enum.KeyCode.Escape then
 							-- ยกเลิก
 							keyBtn.Text = currentKey.Name
 						else
 							currentKey = input.KeyCode
 							keyBtn.Text = currentKey.Name
+							if options.OnChanged then options.OnChanged(currentKey) end
 						end
 						listening = false
+						task.defer(function()
+							if keyCaptureOwner == frame then keyCaptureOwner = nil end
+						end)
 						Tween(kbStroke, 0.2, { Color = Theme.Outline })
 					end
 				else
 					-- กดปุ่มลัดที่ตั้งไว้ → เรียก callback
-					if not gameProcessed
+					if not gameProcessed and not keyCaptureOwner and not UserInputService:GetFocusedTextBox()
 						and input.UserInputType == Enum.UserInputType.Keyboard
 						and input.KeyCode == currentKey then
 						if callback then task.spawn(callback, currentKey) end
@@ -1598,11 +1605,21 @@ function Diq:CreateWindow(config)
 				end
 			end))
 
-			function obj:Set(key) currentKey = key; keyBtn.Text = key.Name end
+			function obj:Set(key)
+				currentKey = key
+				keyBtn.Text = key.Name
+				if options.OnChanged then options.OnChanged(key) end
+			end
+			function obj:Reset() obj:Set(default or Enum.KeyCode.Unknown) end
 			function obj:Get() return currentKey end
 			function obj:SetText(t) lbl.Text = t end
 			function obj:SetVisible(v) frame.Visible = v end
-			function obj:Destroy() frame:Destroy() end
+			function obj:Destroy()
+				listening = false
+				if keyCaptureOwner == frame then keyCaptureOwner = nil end
+				frame:Destroy()
+			end
+			table.insert(Window._elements, obj)
 			return obj
 		end
 
@@ -1640,10 +1657,10 @@ function Diq:CreateWindow(config)
 	end))
 
 	-- ==========================================
-	-- ปุ่มลัด Toggle UI (ค่าเริ่มต้น: RightShift)
+	-- ปุ่มลัด Toggle UI (ค่าเริ่มต้น: K)
 	-- ==========================================
 	connections:Track(UserInputService.InputBegan:Connect(function(input, gameProcessed)
-		if gameProcessed then return end
+		if gameProcessed or keyCaptureOwner or UserInputService:GetFocusedTextBox() then return end
 		if input.KeyCode == toggleKey then
 			isVisible = not isVisible
 			MainFrame.Visible = isVisible
@@ -1653,6 +1670,13 @@ function Diq:CreateWindow(config)
 	-- ==========================================
 	-- 🔧 Public Window Methods
 	-- ==========================================
+
+	function Window:SetToggleKey(key)
+		assert(typeof(key) == "EnumItem" and key.EnumType == Enum.KeyCode and key ~= Enum.KeyCode.Unknown, "Expected a keyboard KeyCode")
+		toggleKey = key
+	end
+
+	function Window:GetToggleKey() return toggleKey end
 
 	function Window:Toggle()
 		isVisible = not isVisible

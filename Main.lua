@@ -81,7 +81,7 @@ local function Start()
 	MyWindow = DiqUI:CreateWindow({
 		OnClose = cleanup,
 		Title = "Diq",
-		ToggleKey = Enum.KeyCode.RightShift,
+		ToggleKey = Enum.KeyCode.K,
 	})
 
 	-- ==========================================
@@ -325,6 +325,13 @@ local function Start()
 		game.Players.LocalPlayer.UserId
 	)
 
+	settingsTab:CreateLabel("WINDOW SHORTCUT")
+	settingsTab:CreateKeybind("Show / Hide Window", MyWindow:GetToggleKey(), nil, {
+		OnChanged = function(key)
+			MyWindow:SetToggleKey(key)
+		end,
+	})
+
 	settingsTab:CreateLabel("UTILITY")
 
 	settingsTab:CreateToggle("Anti-AFK (Prevent Idle Kick)", false, function(state)
@@ -360,7 +367,7 @@ local function Start()
 	-- ==========================================
 	-- ✅ แจ้งเตือนว่าโหลดสำเร็จ
 	-- ==========================================
-	DiqUI:Notify("Loaded Successfully!", "Diq Panel v3.0 is ready\nPress RightShift to toggle UI", 4, "success")
+	DiqUI:Notify("Loaded Successfully!", "Diq Panel v3.0 is ready\nPress K to toggle UI", 4, "success")
 	print("[Diq] Panel v3.0 Loaded Successfully!")
 
 end
