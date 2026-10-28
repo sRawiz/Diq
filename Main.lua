@@ -65,7 +65,7 @@ local function Start()
 	local DiqIcons = LoadModule("DiqIcons", {  }, true)
 	local Movement = LoadModule("MovementSystem", { "Destroy", "Init", "ResetCharacter", "SetCFrameSpeed", "SetFly", "SetFlySpeed", "SetInfinityJump", "SetNoClip", "SetNoFling", "SetSpeed", "Unanchor" })
 	local ESP = LoadModule("ESPSystem", { "Destroy", "Init", "SetBoxes", "SetEnabled", "SetHealth", "SetHighlights", "SetNames", "SetTracers", "SetUseTeamColor" })
-	local Aimbot = LoadModule("AimbotSystem", { "Destroy", "Init", "SetAimMethod", "SetAimPart", "SetEnabled", "SetFOVRadius", "SetShowFOV", "SetSmoothing", "SetTeamCheck", "SetWallCheck" })
+	local Aimbot = LoadModule("AimbotSystem", { "Destroy", "Init", "SetAimMethod", "SetAimPart", "SetEnabled", "SetFOVRadius", "SetMaxDistance", "SetShowFOV", "SetSmoothing", "SetTeamCheck", "SetWallCheck" })
 	local Hitbox = LoadModule("HitboxSystem", { "Destroy", "Init", "SetEnabled", "SetSize", "SetTargetPart", "SetTeamCheck", "SetTransparency" })
 	local Misc = LoadModule("MiscSystem", { "Destroy", "Rejoin", "SetAntiAFK", "SetFullbright" })
 
@@ -208,7 +208,7 @@ local function Start()
 		Aimbot.SetFOVRadius(value)
 	end)
 
-	combatTab:CreateSlider("Smoothness", 1, 100, 50, function(value)
+	combatTab:CreateSlider("Aim Response (Higher = Faster)", 1, 100, 50, function(value)
 	    -- Map 1-100 to 0.01-1
 		Aimbot.SetSmoothing(value / 100)
 	end)
@@ -217,8 +217,16 @@ local function Start()
 		Aimbot.SetAimPart(selected)
 	end)
 
-	combatTab:CreateDropdown("Aim Method (FPS Game)", { "Camera", "Mouse" }, "Camera", function(selected)
-		Aimbot.SetAimMethod(selected)
+	local aimMethodDropdown
+	aimMethodDropdown = combatTab:CreateDropdown("Aim Method", { "Camera", "Mouse" }, "Camera", function(selected)
+		local ok, reason = Aimbot.SetAimMethod(selected)
+		if not ok then
+			aimMethodDropdown:Set(Aimbot.GetAimMethod())
+			DiqUI:Notify("Aim Method Unavailable", reason, 4, "warning")
+		end
+	end)
+	combatTab:CreateSlider("Max Aim Distance (studs)", 100, 10000, 3000, function(value)
+		Aimbot.SetMaxDistance(value)
 	end)
 
 	combatTab:CreateLabel("HITBOX EXPANDER")
