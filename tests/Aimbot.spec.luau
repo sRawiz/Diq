@@ -74,8 +74,8 @@ local function character(x,y)
 end
 LocalPlayer.Character=character(0,0)
 function LocalPlayer:FindFirstChildOfClass() return {} end
-local enemy={Name='Enemy',Parent=Players,Team='red',Neutral=false,Character=character(430,300)}
-local other={Name='Other',Parent=Players,Team='red',Neutral=false,Character=character(450,300)}
+local enemy={Name='Enemy',UserId=10,Parent=Players,Team='red',Neutral=false,Character=character(430,300)}
+local other={Name='Other',UserId=20,Parent=Players,Team='red',Neutral=false,Character=character(450,300)}
 Players.list={LocalPlayer,enemy,other}
 local game = {GetService=function(_,name) return ({Players=Players,RunService=RunService,UserInputService=Input,GuiService=GuiService})[name] end}
 local warnings={}
@@ -91,6 +91,7 @@ assert(#Input.InputBegan.listeners==1,'Init must be idempotent')
 local function tick(dt) for _,fn in pairs(RunService.bindings) do fn(dt or 1/60) end end
 local function press() Input.InputBegan:Fire({UserInputType=2},false) end
 local function target(expected,label) tick(); assert(A.GetCurrentTarget()==expected,label) end
+A.SetTargetMode('Sticky')
 A.SetActivationKey('MouseButton2'); A.SetActivationMode('Hold')
 A.SetEnabled(true); A.SetShowFOV(true); press()
 target(enemy.Character.Head,'closest target')
@@ -175,6 +176,45 @@ A.SetActivationKey('E'); A.SetActivationMode('Toggle')
 Input.InputBegan:Fire({UserInputType=3,KeyCode=10},false); tick(); assert(not A.GetStatus().Active,'old key no longer toggles')
 Input.InputBegan:Fire({UserInputType=3,KeyCode=11},false); tick(); assert(A.GetStatus().Active,'new key toggles')
 A.SetEnabled(false); A.SetEnabled(true); tick(); assert(not A.GetStatus().Active,'master re-enable starts inactive')
+-- Deterministic ranking, challenger debounce and invalidation.
+A.SetActivationKey('MouseButton2'); A.SetActivationMode('Hold'); press()
+A.SetTargetMode('Smart')
+enemy.Character.Head.Position=vec(430,300,10); other.Character.Head.Position=vec(450,300,10)
+Players.list={LocalPlayer,other,enemy}
+target(enemy.Character.Head,'screen ranking ignores enumeration order')
+other.Character.Head.Position=vec(405,300,10)
+target(enemy.Character.Head,'challenger cannot instantly steal lock')
+for _=1,30 do tick() end
+target(other.Character.Head,'sustained better challenger wins')
+enemy.Character.Head.Position=vec(404,300,10)
+for _=1,60 do tick() end
+target(other.Character.Head,'near ties retain current target')
+other.Character.humanoid.Health=0
+target(enemy.Character.Head,'invalid target immediately replaced')
+other.Character.humanoid.Health=100
+A.SetTargetMode('Smart'); enemy.Character.Head.Position=vec(430,300,10); other.Character.Head.Position=vec(430,300,10)
+target(enemy.Character.Head,'UserId breaks exact ties')
+Players.list={LocalPlayer,enemy,other}; A.SetTargetMode('Smart')
+target(enemy.Character.Head,'tie result independent of list ordering')
+-- Depth changes physical distance independently of the mocked projection.
+enemy.Character.Head.Position=vec(430,300,2500); other.Character.Head.Position=vec(435,300,10)
+A.SetTargetMode('Nearest'); target(other.Character.Head,'nearest ranks physical distance')
+A.SetTargetMode('Balanced'); A.SetCrosshairWeight(1)
+target(enemy.Character.Head,'100 percent weight selects screen-nearest')
+A.SetCrosshairWeight(0); A.SetTargetMode('Balanced')
+target(other.Character.Head,'zero percent weight selects physical-nearest')
+A.SetCrosshairWeight(0.7); A.SetTargetMode('Balanced')
+target(other.Character.Head,'balanced weighs both screen and physical distance')
+A.SetTargetMode('Smart'); enemy.Character.Head.Position=vec(430,300,10); other.Character.Head.Position=vec(450,300,10)
+target(enemy.Character.Head,'start interrupted challenger scenario')
+other.Character.Head.Position=vec(405,300,10)
+for _=1,8 do tick() end
+other.Character.Head.Position=vec(450,300,10)
+for _=1,8 do tick() end
+other.Character.Head.Position=vec(405,300,10)
+for _=1,8 do tick() end
+target(enemy.Character.Head,'interrupted challenger loses accumulated timer')
+A.SetTargetMode('Sticky')
 -- Diagnostics expose the actual filters instead of guessing at the game.
 A.SetActivationKey('MouseButton2'); A.SetActivationMode('Hold'); press()
 enemy.Team='blue'; other.Team='blue'; tick()

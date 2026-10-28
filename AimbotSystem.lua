@@ -13,11 +13,15 @@ local Config = {
 	Smoothing = 0.5, AimPart = "Head", WallCheck = false,
 	TeamCheck = true, MaxDistance = 3000,
 	ActivationKey = "Q", ActivationMode = "Toggle",
+	TargetMode = "Balanced", CrosshairWeight = 0.7, SwitchDelay = 0.2,
 }
 local initialized, destroyed, bound = false, false, false
 local focused, held, aiming = true, false, false
 local currentPlayer, currentPart
 local lastAimDirection, lastCamera
+local challenger, challengerTime = nil, 0
+local scanElapsed = 0
+local SCAN_INTERVAL = 0.1
 local status = "Disabled"
 local rejected = {}
 local connections = {}
@@ -31,13 +35,14 @@ local function updateStatusLabel()
 	if statusLabel then
 		statusLabel.Visible = Config.Enabled
 		local activation = Config.ActivationMode .. " " .. Config.ActivationKey .. ": " .. (held and "ON" or "OFF")
-		statusLabel.Text = "Diq Aim | " .. activation .. " | " .. status
+		statusLabel.Text = "Diq Aim | " .. activation .. " | " .. Config.TargetMode .. " | " .. status
 	end
 end
 
 local function releaseTarget()
 	currentPlayer, currentPart, aiming = nil, nil, false
 	lastAimDirection = nil
+	challenger, challengerTime, scanElapsed = nil, 0, 0
 	updateStatusLabel()
 end
 
@@ -101,6 +106,71 @@ local function evaluate(player, camera, origin)
 	return part, point, distance
 end
 
+-- Smaller scores win. UserId breaks exact ties independently of player-list order.
+local function scoreTarget(part, screenDistance, camera)
+	if Config.TargetMode == "Smart" or Config.TargetMode == "Sticky" then return screenDistance end
+	local character = LocalPlayer.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	local worldDistance = (part.Position - (root and root.Position or camera.CFrame.Position)).Magnitude
+	if Config.TargetMode == "Nearest" then return worldDistance end
+	-- Normalize unlike units before combining: pixels/FOV and distance with a
+	-- 100-stud half-scale. User preference changes ranking, not eligibility.
+	return Config.CrosshairWeight * (screenDistance / Config.FOVRadius)
+		+ (1 - Config.CrosshairWeight) * (worldDistance / (worldDistance + 100))
+end
+
+local function better(score, player, bestScore, bestPlayer)
+	return score < bestScore or (score == bestScore and (not bestPlayer or player.UserId < bestPlayer.UserId))
+end
+
+local function selectTarget(camera, origin, dt)
+	local part, point, distance
+	if currentPlayer then part, point, distance = evaluate(currentPlayer, camera, origin) end
+	if not part then releaseTarget() end
+	local currentScore = part and scoreTarget(part, distance, camera) or math.huge
+	scanElapsed = scanElapsed + math.clamp(dt, 0, 0.1)
+	-- Validate the current target every frame, but search challengers at 10 Hz.
+	if part and (Config.TargetMode == "Sticky" or scanElapsed < SCAN_INTERVAL) then
+		return part, point
+	end
+	local elapsed = scanElapsed
+	scanElapsed = 0
+	local bestPlayer, bestPart, bestPoint, bestScore = currentPlayer, part, point, currentScore
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player ~= currentPlayer then
+			local candidate, screen, screenDistance = evaluate(player, camera, origin)
+			if candidate then
+				local score = scoreTarget(candidate, screenDistance, camera)
+				if better(score, player, bestScore, bestPlayer) then
+					bestPlayer, bestPart, bestPoint, bestScore = player, candidate, screen, score
+				end
+			end
+		end
+	end
+	if not part then
+		currentPlayer = bestPlayer
+		return bestPart, bestPoint
+	end
+	-- A challenger must improve the score by 20% AND an absolute margin,
+	-- and remain best across successive scans. Near-equal targets do not chatter.
+	local margin = Config.TargetMode == "Balanced" and 0.025 or (Config.TargetMode == "Nearest" and 3 or 8)
+	if bestPlayer ~= currentPlayer and bestScore < currentScore * 0.8 and currentScore - bestScore >= margin then
+		if challenger ~= bestPlayer then
+			challenger, challengerTime = bestPlayer, 0
+		else
+			challengerTime = challengerTime + elapsed
+		end
+		if challengerTime >= Config.SwitchDelay then
+			currentPlayer = bestPlayer
+			challenger, challengerTime = nil, 0
+			return bestPart, bestPoint
+		end
+	else
+		challenger, challengerTime = nil, 0
+	end
+	return part, point
+end
+
 local function createOverlay()
 	-- Standard Roblox GUI: the FOV indicator does not require executor Drawing.
 	fovGui = Instance.new("ScreenGui")
@@ -157,18 +227,7 @@ local function step(dt)
 	rayParams.FilterDescendantsInstances = { localCharacter, camera }
 
 	table.clear(rejected)
-	local part, point
-	if currentPlayer then part, point = evaluate(currentPlayer, camera, origin) end
-	if not part then
-		releaseTarget()
-		local closest = math.huge
-		for _, player in ipairs(Players:GetPlayers()) do
-			local candidate, screen, distance = evaluate(player, camera, origin)
-			if candidate and distance < closest then
-				closest, currentPlayer, part, point = distance, player, candidate, screen
-			end
-		end
-	end
+	local part, point = selectTarget(camera, origin, dt)
 	currentPart = part
 	if not part then status = "No eligible player in FOV"; updateStatusLabel(); return end
 	status = "Tracking " .. currentPlayer.Name
@@ -284,8 +343,25 @@ function AimbotSystem.GetStatus()
 	return { Reason = destroyed and "Destroyed" or (not Config.Enabled and "Disabled" or status),
 		Active = held, Tracking = aiming, Method = Config.AimMethod,
 		ActivationKey = Config.ActivationKey, ActivationMode = Config.ActivationMode,
+		TargetMode = Config.TargetMode, TargetName = currentPlayer and currentPlayer.Name or nil,
 		Rejected = table.clone(rejected) }
 end
+function AimbotSystem.SetTargetMode(mode)
+	assert(mode == "Balanced" or mode == "Smart" or mode == "Sticky" or mode == "Nearest", "Unknown target mode")
+	Config.TargetMode = mode
+	releaseTarget()
+end
+function AimbotSystem.SetCrosshairWeight(value)
+	Config.CrosshairWeight = finite(value, "Crosshair weight", 0, 1)
+	challenger, challengerTime = nil, 0
+end
+function AimbotSystem.GetCrosshairWeight() return Config.CrosshairWeight end
+function AimbotSystem.GetTargetMode() return Config.TargetMode end
+function AimbotSystem.SetSwitchDelay(value)
+	Config.SwitchDelay = finite(value, "Switch delay", 0.1, 1)
+	challenger, challengerTime = nil, 0
+end
+function AimbotSystem.GetSwitchDelay() return Config.SwitchDelay end
 function AimbotSystem.SetAimMethod(method)
 	if method ~= "Camera" and method ~= "Mouse" then return false, "Unknown aim method" end
 	if method == "Mouse" and type(mousemoverel) ~= "function" then

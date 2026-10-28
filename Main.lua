@@ -65,7 +65,7 @@ local function Start()
 	local DiqIcons = LoadModule("DiqIcons", {  }, true)
 	local Movement = LoadModule("MovementSystem", { "Destroy", "Init", "ResetCharacter", "SetCFrameSpeed", "SetFly", "SetFlySpeed", "SetInfinityJump", "SetNoClip", "SetNoFling", "SetSpeed", "Unanchor" })
 	local ESP = LoadModule("ESPSystem", { "Destroy", "Init", "SetBoxes", "SetEnabled", "SetHealth", "SetHighlights", "SetNames", "SetTracers", "SetUseTeamColor" })
-	local Aimbot = LoadModule("AimbotSystem", { "Destroy", "GetStatus", "Init", "SetActivationKey", "SetActivationMode", "SetAimMethod", "SetAimPart", "SetEnabled", "SetFOVRadius", "SetMaxDistance", "SetShowFOV", "SetSmoothing", "SetTeamCheck", "SetWallCheck" })
+	local Aimbot = LoadModule("AimbotSystem", { "Destroy", "GetStatus", "Init", "SetActivationKey", "SetActivationMode", "SetAimMethod", "SetAimPart", "SetEnabled", "SetFOVRadius", "SetMaxDistance", "SetShowFOV", "SetSmoothing", "SetTeamCheck", "SetTargetMode", "SetCrosshairWeight", "SetSwitchDelay", "SetWallCheck" })
 	local Hitbox = LoadModule("HitboxSystem", { "Destroy", "Init", "SetEnabled", "SetSize", "SetTargetPart", "SetTeamCheck", "SetTransparency" })
 	local Misc = LoadModule("MiscSystem", { "Destroy", "Rejoin", "SetAntiAFK", "SetFullbright" })
 
@@ -219,7 +219,7 @@ local function Start()
 		local reasons = {}
 		for reason, count in pairs(snapshot.Rejected) do table.insert(reasons, reason .. ": " .. count) end
 		table.sort(reasons)
-		local message = snapshot.Reason .. " | " .. snapshot.Method .. " | " .. snapshot.ActivationMode .. " " .. snapshot.ActivationKey
+		local message = snapshot.Reason .. " | " .. snapshot.Method .. " | " .. snapshot.TargetMode .. " | " .. snapshot.ActivationMode .. " " .. snapshot.ActivationKey
 		if #reasons > 0 then message = message .. "\n" .. table.concat(reasons, ", ") end
 		print("[Diq] Aim status: " .. message)
 		DiqUI:Notify("Aimbot Diagnostics", message, 6, "info")
@@ -228,6 +228,23 @@ local function Start()
 	combatTab:CreateToggle("Show FOV Circle", false, function(state)
 		Aimbot.SetShowFOV(state)
 	end, { Icon = "circle" })
+
+	combatTab:CreateLabel("TARGET SELECTION")
+	local targetModes = {
+		["Balanced: Crosshair + Distance"] = "Balanced",
+		["Closest to Crosshair"] = "Smart",
+		["Closest Player"] = "Nearest",
+		["Keep Current Target"] = "Sticky",
+	}
+	combatTab:CreateDropdown("Target Priority", { "Balanced: Crosshair + Distance", "Closest to Crosshair", "Closest Player", "Keep Current Target" }, "Balanced: Crosshair + Distance", function(choice)
+		Aimbot.SetTargetMode(targetModes[choice])
+	end)
+	combatTab:CreateSlider("Balanced: Crosshair Weight (%)", 0, 100, 70, function(value)
+		Aimbot.SetCrosshairWeight(value / 100)
+	end)
+	combatTab:CreateSlider("Target Switch Delay (ms)", 100, 1000, 200, function(value)
+		Aimbot.SetSwitchDelay(value / 1000)
+	end)
 
 	combatTab:CreateLabel("AIMBOT SETTINGS")
 

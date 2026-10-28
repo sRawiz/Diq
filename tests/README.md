@@ -48,3 +48,28 @@ Combat > Diagnose Aimbot to print a snapshot and rejection counts to Output.
 Same team, Outside FOV, Off screen, Blocked by wall and unavailable characters
 are reported separately. This diagnostic reflects the last evaluated frame;
 it does not prove a custom game camera accepted the final camera orientation.
+
+## Target selection
+
+The default Balanced priority combines normalized crosshair distance (70%)
+and physical distance from the local character (30%). Lower scores win:
+`weight * pixels/FOV + (1-weight) * studs/(studs+100)`.
+The distance term reaches 0.5 at 100 studs. This is a ranking heuristic,
+not an AI prediction of threat, weapon range or line of fire.
+
+Combat > Target Priority also offers Closest to Crosshair, Closest Player,
+and Keep Current Target. Crosshair Weight affects Balanced only: 100% uses
+crosshair distance alone; 0% uses physical distance alone. All modes retain
+the FOV, health, team, maximum-distance and optional wall filters.
+
+The current target is validated every frame. Other players are compared at
+10 Hz. A challenger must improve the score by more than 20% and at least
+0.025 Balanced score, 8 pixels in crosshair mode, or 3 studs in nearest mode.
+It must remain best over successive scans for Target Switch Delay (default
+200 ms), so switching may take about 200-300 ms after a challenger appears.
+Invalid targets are replaced immediately, without this delay. Sticky priority
+never switches a still-valid target. Exact-score ties use the lower UserId.
+
+Regression tests cover combined-score weighting, physical-distance ranking,
+enumeration-independent ties, sustained challengers, near-tie stability,
+interrupted challengers and immediate replacement of dead targets.
