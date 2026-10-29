@@ -1,5 +1,47 @@
 # Aim Assist verification
 
+## ESP รุ่นปรับปรุง
+
+แก้ไข `Main.lua` และ `ESPSystem.lua` ให้ขึ้น remote ต้นทางพร้อมกันก่อนใช้ loader
+เพราะ Main โหลดโมดูลจาก GitHub ไม่ได้อ่านไฟล์ที่แก้ในเครื่องโดยตรง
+
+- หน้า Visual แยก Show Teammates, Show Enemies และ Show Unknown / Neutral
+  โดยค่าเริ่มต้นแสดงทุกกลุ่ม และ ESP master ยังปิดอยู่
+- โหมด Relation ใช้ฟ้า/แดง/ทองตามฝ่าย เลือกสีของแต่ละฝ่ายได้จากชุดสีในเมนู
+  โหมด Team ใช้สีทีมของเกม (ถ้าไม่มีทีม/เป็นกลาง ใช้สีตามฝ่าย)
+  โหมด Uniform ใช้สีเดียวจาก SetColor ตาม API เดิม
+- เปิด Show Names & Distance เพื่อแสดงชื่อพร้อมป้ายฝ่าย เปิด/ปิดป้ายได้แยกกัน
+  ระยะวัดจากกล้องเป็น studs; Range = 0 หมายถึงไม่จำกัด
+- ระบบมาตรฐานเปรียบเทียบ Team object และตรวจ Neutral ของทั้งเราและเป้าหมาย
+  ถ้าฝั่งใดเป็นกลางหรือไม่มีทีม จะเป็น Unknown ไม่เหมารวมว่าเป็นศัตรู
+- Team Attribute เป็นตัวเลือกสำหรับเกมที่เก็บฝ่ายไว้ใน Attribute บน Player:
+  กรอกชื่อ Attribute ที่มีจริง เช่น Faction จึงจะใช้ค่านั้นแทน Team/Neutral
+  รองรับ string ที่ไม่ว่างหรือ number (รวม 0); ค่าเท่ากันเป็นเพื่อนร่วมทีม
+  ค่าต่างกันเป็นศัตรู ค่าที่ขาดหาย/boolean/NaN เป็น Unknown
+  ไม่ค้นหา Attribute บน Character หรือระบบฝ่ายเฉพาะเกมให้อัตโนมัติ
+  ล้างช่องแล้วออกจากช่องเพื่อกลับไปใช้ทีม Roblox
+- ปิด ESP จะซ่อนภาพทันทีและหยุด render connection; ปิดหน้าต่างจะ cleanup
+  Highlight ยังใช้งานได้เมื่อ Drawing API ไม่พร้อม พร้อมข้อความเตือนครั้งเดียว
+  การรองรับ Drawing และ CoreGui ต้องตรวจด้วย executor ที่ใช้งานจริง
+
+รันทดสอบแบบจำลองด้วย Luau ทางการ:
+
+```powershell
+python tests/run_esp.py --luau-dir C:/path/to/luau
+```
+
+ชุดนี้ compile ไฟล์ Lua ใน repository และทดสอบ production ESP ด้วย engine mocks
+ครอบคลุมฝ่าย/Neutral/Attribute, สี, การกรอง, ระยะ, กล้อง, ตาย/เกิดใหม่,
+ไม่มี Head, HP สูงสุดเป็นศูนย์, ผู้เล่นเข้าออก, Drawing ขาดหาย และ cleanup
+ไม่ได้ยืนยันภาพจริงหรือสิทธิ์ของ executor
+
+ตรวจในเกมเพิ่มเติม: เปิด ESP และองค์ประกอบทุกชนิด สลับทีมทั้งเราและเป้าหมาย
+ลอง Unknown/Neutral และตัวกรองแต่ละกลุ่ม สลับโหมดสี/ระยะ จากนั้นตายเกิดใหม่
+ปิดหน้าต่างและรัน loader ซ้ำ ต้องไม่มีภาพหรือ handler ของรอบเก่าค้าง
+สำหรับเกม FFA ที่ไม่มี Team ผู้เล่นจะอยู่ใน Unknown; เปิดกลุ่มนี้เพื่อให้แสดง
+
+## Aim Assist
+
 Run with official Windows Luau binaries (`luau.exe` and `luau-compile.exe`):
 
 ```powershell

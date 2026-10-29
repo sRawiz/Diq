@@ -64,7 +64,7 @@ local function Start()
 	local DiqUI = LoadModule("DiqUILib", { "CreateWindow", "Destroy", "LoadIcons", "Notify" })
 	local DiqIcons = LoadModule("DiqIcons", {  }, true)
 	local Movement = LoadModule("MovementSystem", { "Destroy", "Init", "ResetCharacter", "SetCFrameSpeed", "SetFly", "SetFlySpeed", "SetInfinityJump", "SetNoClip", "SetNoFling", "SetSpeed", "Unanchor" })
-	local ESP = LoadModule("ESPSystem", { "Destroy", "Init", "SetBoxes", "SetEnabled", "SetHealth", "SetHighlights", "SetNames", "SetTracers", "SetUseTeamColor" })
+	local ESP = LoadModule("ESPSystem", { "Destroy", "Init", "SetBoxes", "SetEnabled", "SetHealth", "SetHighlights", "SetNames", "SetTracers", "SetUseTeamColor", "SetColorMode", "SetRelationVisible", "SetRelationColor", "SetShowRelation", "SetTeamAttribute", "SetMaxDistance" })
 	local Aimbot = LoadModule("AimbotSystem", { "Destroy", "Init", "ApplyAssistPreset", "SetEnabledListener", "SetEnabled", "SetAimPart", "SetFOVRadius", "SetShowFOV" })
 	local Hitbox = LoadModule("HitboxSystem", { "Destroy", "Init", "SetEnabled", "SetSize", "SetTargetPart", "SetTeamCheck", "SetTransparency" })
 	local Misc = LoadModule("MiscSystem", { "Destroy", "Rejoin", "SetAntiAFK", "SetFullbright" })
@@ -272,11 +272,39 @@ local function Start()
 		ESP.SetTracers(state)
 	end, { Icon = "git-commit" })
 
-	visualTab:CreateLabel("ESP SETTINGS")
-
-	visualTab:CreateToggle("Use Team Color", true, function(state)
-		ESP.SetUseTeamColor(state)
+	visualTab:CreateLabel("ESP TEAMS")
+	visualTab:CreateToggle("Show Teammates", true, function(state)
+		ESP.SetRelationVisible("Teammate", state)
 	end, { Icon = "users" })
+	visualTab:CreateToggle("Show Enemies", true, function(state)
+		ESP.SetRelationVisible("Enemy", state)
+	end, { Icon = "eye" })
+	visualTab:CreateToggle("Show Unknown / Neutral", true, function(state)
+		ESP.SetRelationVisible("Unknown", state)
+	end, { Icon = "users" })
+	visualTab:CreateToggle("Show Relation in Names", true, function(state)
+		ESP.SetShowRelation(state)
+	end, { Icon = "type" })
+	visualTab:CreateDropdown("ESP Colors", { "Relation", "Team", "Uniform" }, "Relation", function(mode)
+		ESP.SetColorMode(mode)
+	end)
+	local espPalette = {
+		Blue = Color3.fromRGB(80, 200, 255), Red = Color3.fromRGB(255, 70, 90),
+		Gold = Color3.fromRGB(255, 200, 80), Green = Color3.fromRGB(90, 230, 130),
+		Purple = Color3.fromRGB(190, 120, 255), White = Color3.fromRGB(255, 255, 255),
+	}
+	for _, entry in { { "Teammate", "Blue" }, { "Enemy", "Red" }, { "Unknown", "Gold" } } do
+		local relation = entry[1]
+		visualTab:CreateDropdown(relation .. " Color", { "Blue", "Red", "Gold", "Green", "Purple", "White" }, entry[2], function(name)
+			ESP.SetRelationColor(relation, espPalette[name])
+		end)
+	end
+	visualTab:CreateSlider("ESP Range (studs, 0 = unlimited)", 0, 5000, 0, function(value)
+		ESP.SetMaxDistance(value)
+	end)
+	visualTab:CreateInput("Team Attribute (optional)", "Empty = Roblox teams", function(value)
+		ESP.SetTeamAttribute(value:match("^%s*(.-)%s*$"))
+	end)
 
 	visualTab:CreateLabel("WORLD VISUALS")
 

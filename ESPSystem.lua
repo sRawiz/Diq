@@ -32,7 +32,17 @@ local Config = {
 	Tracers = false,
 	Health = false,
 	Highlights = true,
-	UseTeamColor = true,
+	UseTeamColor = false,
+	ColorMode = "Relation",
+	ShowTeammates = true,
+	ShowEnemies = true,
+	ShowUnknown = true,
+	ShowRelation = true,
+	TeamAttribute = "", -- Optional Player attribute; never guess game-specific team fields.
+	MaxDistance = 0, -- Studs; 0 means unlimited.
+	TeammateColor = Color3.fromRGB(80, 200, 255),
+	EnemyColor = Color3.fromRGB(255, 70, 90),
+	UnknownColor = Color3.fromRGB(255, 200, 80),
 	Color = Color3.fromRGB(255, 0, 50),
 }
 
@@ -42,6 +52,7 @@ local Config = {
 local ESP_Cache = {} -- [Player] = { Highlight, Box, Name, Tracer, HealthBg, HealthBar, HpText }
 local ESPFolder = nil
 local Connections = {}
+local drawingWarningShown = false
 
 -- ==========================================
 -- Helpers
@@ -50,9 +61,34 @@ local function GetCamera()
 	return workspace.CurrentCamera
 end
 
-local function GetColor(player)
-	if Config.UseTeamColor and player.Team then
+local function GetRelation(player)
+	if player == LocalPlayer then return "Self" end
+	if Config.TeamAttribute ~= "" then
+		local ownTeam = LocalPlayer:GetAttribute(Config.TeamAttribute)
+		local otherTeam = player:GetAttribute(Config.TeamAttribute)
+		-- Missing/custom neutral values must not accidentally become enemies.
+		if ownTeam == nil or otherTeam == nil or ownTeam == "" or otherTeam == ""
+			or ownTeam ~= ownTeam or otherTeam ~= otherTeam
+			or (type(ownTeam) ~= "string" and type(ownTeam) ~= "number")
+			or (type(otherTeam) ~= "string" and type(otherTeam) ~= "number") then
+			return "Unknown"
+		end
+		return ownTeam == otherTeam and "Teammate" or "Enemy"
+	end
+	if LocalPlayer.Neutral or player.Neutral or not LocalPlayer.Team or not player.Team then
+		return "Unknown"
+	end
+	return player.Team == LocalPlayer.Team and "Teammate" or "Enemy"
+end
+
+local function GetColor(player, relation)
+	if Config.ColorMode == "Team" and not player.Neutral and player.Team then
 		return player.TeamColor.Color
+	end
+	if Config.ColorMode ~= "Uniform" then
+		if relation == "Teammate" then return Config.TeammateColor end
+		if relation == "Enemy" then return Config.EnemyColor end
+		return Config.UnknownColor
 	end
 	return Config.Color
 end
@@ -60,12 +96,21 @@ end
 --- สร้าง Drawing object อย่างปลอดภัย (แต่ละตัวแยก pcall — ถ้าตัวใดพัง ตัวอื่นยังใช้ได้)
 local function CreateDrawingSafe(drawingType, props)
 	local obj = nil
-	pcall(function()
+	local success = pcall(function()
 		obj = Drawing.new(drawingType)
+		obj.Visible = false
 		for key, value in props do
 			obj[key] = value
 		end
 	end)
+	if not success then
+		if obj then pcall(function() obj:Remove() end) end
+		obj = nil
+		if not drawingWarningShown then
+			drawingWarningShown = true
+			warn("[Diq ESP] Drawing creation failed. Boxes, names, tracers or health may be unavailable; use Highlights or an executor with a compatible Drawing API.")
+		end
+	end
 	return obj
 end
 
@@ -87,7 +132,7 @@ local function UpdateName(cache, screenData, color, playerName, distance)
 	cache.Name.Visible = Config.Names
 	if not Config.Names then return end
 
-	cache.Name.Text = string.format("%s [%dm]", playerName, distance)
+	cache.Name.Text = string.format("%s [%d studs]", playerName, distance)
 	cache.Name.Position = Vector2.new(screenData.RootX, screenData.HeadY - 20)
 	cache.Name.Color = color
 end
@@ -112,7 +157,7 @@ local function UpdateHealthBar(cache, screenData, humanoid)
 
 	if not Config.Health then return end
 
-	local healthPct = math.clamp(humanoid.Health / humanoid.MaxHealth, 0, 1)
+	local healthPct = humanoid.MaxHealth > 0 and math.clamp(humanoid.Health / humanoid.MaxHealth, 0, 1) or 0
 	local healthColor = HEALTH_COLOR_LOW:Lerp(HEALTH_COLOR_FULL, healthPct)
 	local barX = screenData.RootX - screenData.Width / 2 - HEALTH_BAR_OFFSET - HEALTH_BAR_WIDTH
 
@@ -143,6 +188,18 @@ local function HideAllDrawings(cache)
 	if cache.HpText then cache.HpText.Visible = false end
 end
 
+local function HideESP(cache)
+	if cache.Highlight then
+		cache.Highlight.Enabled = false
+		cache.Highlight.Adornee = nil
+	end
+	HideAllDrawings(cache)
+end
+
+local function HideAllESP()
+	for _, cache in ESP_Cache do HideESP(cache) end
+end
+
 -- ==========================================
 -- ESP Cache Management
 -- ==========================================
@@ -153,7 +210,8 @@ local function CreateESPFolder()
 		folder.Parent = CoreGui
 	end)
 	if not success then
-		folder.Parent = game:GetService("Lighting") -- Fallback สำหรับ executor ที่ไม่รองรับ CoreGui
+		-- A workspace folder also supports Highlights without privileged CoreGui access.
+		folder.Parent = workspace
 	end
 	return folder
 end
@@ -167,6 +225,7 @@ local function CreateESP(player)
 	-- Highlight (Instance-based)
 	local hl = Instance.new("Highlight")
 	hl.Name = player.Name .. "_ESP"
+	hl.Enabled = false
 	hl.FillTransparency = 0.5
 	hl.OutlineTransparency = 0
 	hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
@@ -201,13 +260,12 @@ local function RemoveESP(player)
 	local cache = ESP_Cache[player]
 	if not cache then return end
 
-	if cache.Highlight then cache.Highlight:Destroy() end
-	if cache.Box then cache.Box:Remove() end
-	if cache.Name then cache.Name:Remove() end
-	if cache.Tracer then cache.Tracer:Remove() end
-	if cache.HealthBg then cache.HealthBg:Remove() end
-	if cache.HealthBar then cache.HealthBar:Remove() end
-	if cache.HpText then cache.HpText:Remove() end
+	-- One executor object failing cleanup must not leave the remaining objects behind.
+	for key, object in cache do
+		pcall(function()
+			if key == "Highlight" then object:Destroy() else object:Remove() end
+		end)
+	end
 
 	ESP_Cache[player] = nil
 end
@@ -222,23 +280,33 @@ end
 -- Main Update Loop
 -- ==========================================
 local function UpdateESP()
+	if destroyed or not Config.Enabled then return end
 	local camera = GetCamera()
-	if not camera then return end
+	if not camera then HideAllESP(); return end
 
 	for player, cache in ESP_Cache do
 		local character = player.Character
 		local rootPart = character and character:FindFirstChild("HumanoidRootPart")
 		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 		local isValid = Config.Enabled and character and rootPart and humanoid
+			and rootPart:IsA("BasePart") and character:IsDescendantOf(workspace)
 			and humanoid.Health > 0 and player ~= LocalPlayer
 
 		if not isValid then
-			if cache.Highlight then cache.Highlight.Enabled = false end
-			HideAllDrawings(cache)
+			HideESP(cache)
 			continue
 		end
 
-		local color = GetColor(player)
+		local relation = GetRelation(player)
+		local allowed = (relation == "Teammate" and Config.ShowTeammates)
+			or (relation == "Enemy" and Config.ShowEnemies)
+			or (relation == "Unknown" and Config.ShowUnknown)
+		local distance = (camera.CFrame.Position - rootPart.Position).Magnitude
+		if not allowed or (Config.MaxDistance > 0 and distance > Config.MaxDistance) then
+			HideESP(cache)
+			continue
+		end
+		local color = GetColor(player, relation)
 
 		-- Highlight
 		if cache.Highlight then
@@ -253,18 +321,17 @@ local function UpdateESP()
 		local head = character:FindFirstChild("Head")
 
 		-- ✅ Fallback if Head is missing (ENTRENCHED and some FPS games don't have Head initially)
-		local headWorldPos = head and head.Position or (rootPart.Position + Vector3.new(0, 1.5, 0))
+		local headWorldPos = head and head:IsA("BasePart") and head.Position or (rootPart.Position + Vector3.new(0, 1.5, 0))
 		local headPos = camera:WorldToViewportPoint(headWorldPos + Vector3.new(0, 0.5, 0))
 		local legPos = camera:WorldToViewportPoint(rootPart.Position - Vector3.new(0, 3, 0))
 
-		if not onScreen then
+		if not onScreen or rootPos.Z <= 0 or headPos.Z <= 0 or legPos.Z <= 0 then
 			HideAllDrawings(cache)
 			continue
 		end
 
 		local height = math.abs(headPos.Y - legPos.Y)
 		local width = height / 2
-		local distance = math.floor((camera.CFrame.Position - rootPart.Position).Magnitude)
 
 		-- รวม screen data เป็น struct เพื่อส่งให้ sub-functions
 		local screenData = {
@@ -276,7 +343,8 @@ local function UpdateESP()
 		}
 
 		UpdateBox(cache, screenData, color)
-		UpdateName(cache, screenData, color, player.Name, distance)
+		local label = Config.ShowRelation and ("[" .. relation .. "] " .. player.Name) or player.Name
+		UpdateName(cache, screenData, color, label, math.floor(distance))
 		UpdateTracer(cache, screenData, color, camera.ViewportSize)
 		UpdateHealthBar(cache, screenData, humanoid)
 	end
@@ -287,6 +355,9 @@ end
 -- ==========================================
 local function Initialize()
 	ESPFolder = CreateESPFolder()
+	-- Connect before enumeration so joins during startup cannot be missed.
+	Connections.PlayerAdded = Players.PlayerAdded:Connect(CreateESP)
+	Connections.PlayerRemoving = Players.PlayerRemoving:Connect(RemoveESP)
 
 	for _, player in Players:GetPlayers() do
 		if player ~= LocalPlayer then
@@ -294,21 +365,14 @@ local function Initialize()
 		end
 	end
 
-	Connections.PlayerAdded = Players.PlayerAdded:Connect(function(player)
-		CreateESP(player)
-	end)
-
-	Connections.PlayerRemoving = Players.PlayerRemoving:Connect(function(player)
-		RemoveESP(player)
-	end)
-
-	Connections.RenderStepped = RunService.RenderStepped:Connect(UpdateESP)
+	if Config.Enabled then Connections.RenderStepped = RunService.RenderStepped:Connect(UpdateESP) end
 end
 
 --- ทำลายทุกอย่าง ป้องกัน leak เมื่อ execute ซ้ำ
 function ESPSystem.Destroy()
 	if destroyed then return end
 	destroyed = true
+	Config.Enabled = false
 	for _, connection in Connections do
 		if connection and connection.Connected then
 			connection:Disconnect()
@@ -328,12 +392,14 @@ end
 -- Public API — Setters
 -- ==========================================
 function ESPSystem.SetEnabled(state)
-	Config.Enabled = state
-	if not state then
-		for _, cache in ESP_Cache do
-			if cache.Highlight then cache.Highlight.Enabled = false end
-			HideAllDrawings(cache)
-		end
+	if destroyed then return end
+	Config.Enabled = state == true
+	if Config.Enabled and initialized and not Connections.RenderStepped then
+		Connections.RenderStepped = RunService.RenderStepped:Connect(UpdateESP)
+	elseif not Config.Enabled then
+		if Connections.RenderStepped then Connections.RenderStepped:Disconnect() end
+		Connections.RenderStepped = nil
+		HideAllESP()
 	end
 end
 
@@ -342,8 +408,47 @@ function ESPSystem.SetBoxes(state) Config.Boxes = state end
 function ESPSystem.SetNames(state) Config.Names = state end
 function ESPSystem.SetTracers(state) Config.Tracers = state end
 function ESPSystem.SetHealth(state) Config.Health = state end
-function ESPSystem.SetUseTeamColor(state) Config.UseTeamColor = state end
+-- Legacy false retains the old single-color behavior; the new UI selects Relation explicitly.
+function ESPSystem.SetUseTeamColor(state)
+	ESPSystem.SetColorMode(state and "Team" or "Uniform")
+end
 function ESPSystem.SetColor(color) Config.Color = color end
+
+function ESPSystem.SetColorMode(mode: string)
+	assert(mode == "Relation" or mode == "Team" or mode == "Uniform", "Invalid ESP color mode")
+	Config.ColorMode = mode
+	Config.UseTeamColor = mode == "Team"
+end
+
+function ESPSystem.SetRelationVisible(relation: string, visible: boolean)
+	local key = ({ Teammate = "ShowTeammates", Enemy = "ShowEnemies", Unknown = "ShowUnknown" })[relation]
+	assert(key, "Invalid ESP relation")
+	Config[key] = visible == true
+	HideAllESP()
+end
+
+function ESPSystem.SetRelationColor(relation: string, color: Color3)
+	local key = ({ Teammate = "TeammateColor", Enemy = "EnemyColor", Unknown = "UnknownColor" })[relation]
+	assert(key and typeof(color) == "Color3", "Expected ESP relation and Color3")
+	Config[key] = color
+end
+
+function ESPSystem.SetShowRelation(state: boolean) Config.ShowRelation = state == true end
+
+function ESPSystem.SetTeamAttribute(attribute: string)
+	assert(type(attribute) == "string", "Expected Player team attribute name (empty uses Roblox teams)")
+	Config.TeamAttribute = attribute
+	HideAllESP()
+end
+
+function ESPSystem.SetMaxDistance(distance: number)
+	assert(type(distance) == "number" and distance == distance and distance >= 0 and distance < math.huge,
+		"Expected finite nonnegative distance in studs")
+	Config.MaxDistance = distance
+	HideAllESP()
+end
+
+function ESPSystem.GetRelation(player: Player): string return GetRelation(player) end
 
 -- ==========================================
 -- Public API — Getters
