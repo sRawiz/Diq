@@ -78,7 +78,7 @@ local function tick() RunService.RenderStepped:Fire() end
 esp.Init(); esp.Init()
 check(Players.PlayerAdded:Count()==1,'Init must be idempotent')
 check(RunService.RenderStepped:Count()==0,'Disabled ESP must not render')
-check(not highlight('Enemy').Enabled,'No startup flash')
+check(not highlight('Enemy') and #drawings==0,'Disabled startup must allocate no per-player visuals')
 check(esp.GetRelation(own)=='Self','Self classification')
 check(esp.GetRelation(ally)=='Teammate','Same team')
 check(esp.GetRelation(enemy)=='Enemy','Different team')
@@ -91,12 +91,16 @@ ally.Neutral=false; own.Team=nil
 check(esp.GetRelation(unknown)=='Unknown','nil teams must not become allies')
 own.Team=blue
 esp.SetEnabled(true); esp.SetEnabled(true); tick()
+check(#drawings==0 and esp.GetMetrics().Projections==0,'Highlight-only must not allocate Drawing or project points')
 check(RunService.RenderStepped:Count()==1,'No duplicate render loop')
 check(highlight('Ally').FillColor==esp.GetConfig().TeammateColor,'Ally relation color')
 check(highlight('Enemy').FillColor==esp.GetConfig().EnemyColor,'Enemy relation color')
 check(highlight('Unknown').FillColor==esp.GetConfig().UnknownColor,'Unknown relation color')
 esp.SetNames(true); esp.SetBoxes(true); esp.SetHealth(true); esp.SetTracers(true); tick()
-local enemyName=drawings[8] -- six drawings per player; second entry is Name
+local enemyName
+for _,drawing in drawings do
+ if drawing.Text and string.find(drawing.Text,'Enemy',1,true) then enemyName=drawing end
+end
 check(enemyName.Visible and string.find(enemyName.Text,'[Enemy]',1,true)~=nil,'Relation name label')
 check(string.find(enemyName.Text,'studs',1,true)~=nil,'Distance uses studs')
 esp.SetRelationVisible('Teammate',false); tick()
@@ -170,6 +174,8 @@ Drawing=nil
 local second=loadModule()
 second.SetEnabled(true); tick()
 check(highlight('Enemy').Enabled,'Highlight survives missing Drawing API')
+check(#warnings==0,'Highlight-only must not probe the executor Drawing API')
+second.SetBoxes(true); second.SetNames(true); tick(); tick()
 check(#warnings==1,'Report Drawing failure once, not every object/frame')
 second.Destroy()
 check(RunService.RenderStepped:Count()==0,'Repeated execution cleans up')

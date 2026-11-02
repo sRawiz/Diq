@@ -1,0 +1,13 @@
+{
+  "entry": "Main",
+  "modules": [
+    "Infrastructure",
+    "DiqUILib",
+    "DiqIcons",
+    "MovementSystem",
+    "ESPSystem",
+    "AimbotSystem",
+    "HitboxSystem",
+    "MiscSystem"
+  ]
+}

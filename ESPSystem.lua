@@ -1,4 +1,5 @@
 local ModuleOptions = ...
+local Runtime = type(ModuleOptions) == "table" and ModuleOptions.Runtime
 local initialized = false
 local destroyed = false
 
@@ -53,6 +54,8 @@ local ESP_Cache = {} -- [Player] = { Highlight, Box, Name, Tracer, HealthBg, Hea
 local ESPFolder = nil
 local Connections = {}
 local drawingWarningShown = false
+local metrics = { Projections = 0, Drawings = 0 }
+local failedDrawingTypes = {}
 
 -- ==========================================
 -- Helpers
@@ -95,15 +98,17 @@ end
 
 --- สร้าง Drawing object อย่างปลอดภัย (แต่ละตัวแยก pcall — ถ้าตัวใดพัง ตัวอื่นยังใช้ได้)
 local function CreateDrawingSafe(drawingType, props)
+	if failedDrawingTypes[drawingType] then return nil end
 	local obj = nil
 	local success = pcall(function()
-		obj = Drawing.new(drawingType)
+		obj = Runtime and Runtime.Adapters.CreateDrawing(drawingType) or Drawing.new(drawingType)
 		obj.Visible = false
 		for key, value in props do
 			obj[key] = value
 		end
 	end)
 	if not success then
+		failedDrawingTypes[drawingType] = true
 		if obj then pcall(function() obj:Remove() end) end
 		obj = nil
 		if not drawingWarningShown then
@@ -111,6 +116,7 @@ local function CreateDrawingSafe(drawingType, props)
 			warn("[Diq ESP] Drawing creation failed. Boxes, names, tracers or health may be unavailable; use Highlights or an executor with a compatible Drawing API.")
 		end
 	end
+	if obj then metrics.Drawings += 1 end
 	return obj
 end
 
@@ -132,7 +138,10 @@ local function UpdateName(cache, screenData, color, playerName, distance)
 	cache.Name.Visible = Config.Names
 	if not Config.Names then return end
 
-	cache.Name.Text = string.format("%s [%d studs]", playerName, distance)
+	if cache.LastLabel ~= playerName or cache.LastDistance ~= distance then
+		cache.Name.Text = string.format("%s [%d studs]", playerName, distance)
+		cache.LastLabel, cache.LastDistance = playerName, distance
+	end
 	cache.Name.Position = Vector2.new(screenData.RootX, screenData.HeadY - 20)
 	cache.Name.Color = color
 end
@@ -173,7 +182,11 @@ local function UpdateHealthBar(cache, screenData, humanoid)
 
 	-- HP Text
 	if cache.HpText then
-		cache.HpText.Text = string.format("[%d HP]", math.floor(humanoid.Health))
+		local health = math.floor(humanoid.Health)
+		if cache.LastHealth ~= health then
+			cache.HpText.Text = string.format("[%d HP]", health)
+			cache.LastHealth = health
+		end
 		cache.HpText.Position = Vector2.new(screenData.RootX, screenData.LegY + 2)
 		cache.HpText.Color = healthColor
 	end
@@ -217,43 +230,37 @@ local function CreateESPFolder()
 end
 
 local function CreateESP(player)
-	if ESP_Cache[player] then return end
-	if player == LocalPlayer then return end
+	if destroyed or player == LocalPlayer or ESP_Cache[player] then return end
+	ESP_Cache[player] = { Screen = {} }
+end
 
-	local cache = {}
-
-	-- Highlight (Instance-based)
-	local hl = Instance.new("Highlight")
-	hl.Name = player.Name .. "_ESP"
-	hl.Enabled = false
-	hl.FillTransparency = 0.5
-	hl.OutlineTransparency = 0
-	hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-	hl.Parent = ESPFolder
-	cache.Highlight = hl
-
-	-- Drawings (แต่ละตัว pcall แยก)
-	cache.Box = CreateDrawingSafe("Square", {
-		Thickness = 1, Filled = false, Transparency = 1,
-	})
-	cache.Name = CreateDrawingSafe("Text", {
-		Size = TEXT_SIZE_NAME, Center = true, Outline = true,
-	})
-	cache.Tracer = CreateDrawingSafe("Line", {
-		Thickness = 1,
-	})
-	cache.HealthBg = CreateDrawingSafe("Square", {
-		Thickness = 1, Filled = true, Transparency = 1,
-		Color = Color3.fromRGB(0, 0, 0),
-	})
-	cache.HealthBar = CreateDrawingSafe("Square", {
-		Thickness = 1, Filled = true, Transparency = 1,
-	})
-	cache.HpText = CreateDrawingSafe("Text", {
-		Size = TEXT_SIZE_HP, Center = true, Outline = true,
-	})
-
-	ESP_Cache[player] = cache
+local function EnsureVisuals(player, cache)
+	if Config.Highlights and not cache.Highlight then
+		local hl = Instance.new("Highlight")
+		hl.Name = player.Name .. "_ESP"
+		hl.Enabled = false
+		hl.FillTransparency = 0.5
+		hl.OutlineTransparency = 0
+		hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+		hl.Parent = ESPFolder
+		cache.Highlight = hl
+	end
+	if Config.Boxes and not cache.Box then
+		cache.Box = CreateDrawingSafe("Square", { Thickness = 1, Filled = false, Transparency = 1 })
+	end
+	if Config.Names and not cache.Name then
+		cache.Name = CreateDrawingSafe("Text", { Size = TEXT_SIZE_NAME, Center = true, Outline = true })
+	end
+	if Config.Tracers and not cache.Tracer then
+		cache.Tracer = CreateDrawingSafe("Line", { Thickness = 1 })
+	end
+	if Config.Health then
+		if not cache.HealthBg then
+			cache.HealthBg = CreateDrawingSafe("Square", { Thickness = 1, Filled = true, Transparency = 1, Color = Color3.fromRGB(0, 0, 0) })
+		end
+		if not cache.HealthBar then cache.HealthBar = CreateDrawingSafe("Square", { Thickness = 1, Filled = true, Transparency = 1 }) end
+		if not cache.HpText then cache.HpText = CreateDrawingSafe("Text", { Size = TEXT_SIZE_HP, Center = true, Outline = true }) end
+	end
 end
 
 local function RemoveESP(player)
@@ -261,7 +268,9 @@ local function RemoveESP(player)
 	if not cache then return end
 
 	-- One executor object failing cleanup must not leave the remaining objects behind.
-	for key, object in cache do
+	for _, key in { "Highlight", "Box", "Name", "Tracer", "HealthBg", "HealthBar", "HpText" } do
+		local object = cache[key]
+		if not object then continue end
 		pcall(function()
 			if key == "Highlight" then object:Destroy() else object:Remove() end
 		end)
@@ -286,8 +295,9 @@ local function UpdateESP()
 
 	for player, cache in ESP_Cache do
 		local character = player.Character
-		local rootPart = character and character:FindFirstChild("HumanoidRootPart")
-		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+		local record = Runtime and Runtime.Registry:Get(player)
+		local rootPart = record and record.Root or (character and character:FindFirstChild("HumanoidRootPart"))
+		local humanoid = record and record.Humanoid or (character and character:FindFirstChildOfClass("Humanoid"))
 		local isValid = Config.Enabled and character and rootPart and humanoid
 			and rootPart:IsA("BasePart") and character:IsDescendantOf(workspace)
 			and humanoid.Health > 0 and player ~= LocalPlayer
@@ -308,6 +318,7 @@ local function UpdateESP()
 		end
 		local color = GetColor(player, relation)
 
+		EnsureVisuals(player, cache)
 		-- Highlight
 		if cache.Highlight then
 			cache.Highlight.Enabled = Config.Highlights
@@ -316,8 +327,16 @@ local function UpdateESP()
 			cache.Highlight.OutlineColor = color
 		end
 
+		if not ((Config.Boxes and cache.Box) or (Config.Names and cache.Name)
+			or (Config.Tracers and cache.Tracer) or (Config.Health and cache.HealthBg)) then
+			HideAllDrawings(cache)
+			continue
+		end
+		metrics.Projections += 1
 		-- คำนวณตำแหน่งบนหน้าจอ
 		local rootPos, onScreen = camera:WorldToViewportPoint(rootPart.Position)
+		if not onScreen or rootPos.Z <= 0 then HideAllDrawings(cache); continue end
+		metrics.Projections += 2
 		local head = character:FindFirstChild("Head")
 
 		-- ✅ Fallback if Head is missing (ENTRENCHED and some FPS games don't have Head initially)
@@ -334,13 +353,9 @@ local function UpdateESP()
 		local width = height / 2
 
 		-- รวม screen data เป็น struct เพื่อส่งให้ sub-functions
-		local screenData = {
-			RootX = rootPos.X,
-			HeadY = headPos.Y,
-			LegY = legPos.Y,
-			Height = height,
-			Width = width,
-		}
+		local screenData = cache.Screen
+		screenData.RootX, screenData.HeadY, screenData.LegY = rootPos.X, headPos.Y, legPos.Y
+		screenData.Height, screenData.Width = height, width
 
 		UpdateBox(cache, screenData, color)
 		local label = Config.ShowRelation and ("[" .. relation .. "] " .. player.Name) or player.Name
@@ -353,6 +368,12 @@ end
 -- ==========================================
 -- Initialize / Destroy
 -- ==========================================
+local function ConnectRender()
+	if Runtime then
+		return Runtime.Scheduler:Connect("ESP.Render", "RenderStepped", 0, UpdateESP, function() ESPSystem.SetEnabled(false) end)
+	end
+	return RunService.RenderStepped:Connect(UpdateESP)
+end
 local function Initialize()
 	ESPFolder = CreateESPFolder()
 	-- Connect before enumeration so joins during startup cannot be missed.
@@ -365,7 +386,7 @@ local function Initialize()
 		end
 	end
 
-	if Config.Enabled then Connections.RenderStepped = RunService.RenderStepped:Connect(UpdateESP) end
+	if Config.Enabled then Connections.RenderStepped = ConnectRender() end
 end
 
 --- ทำลายทุกอย่าง ป้องกัน leak เมื่อ execute ซ้ำ
@@ -395,7 +416,7 @@ function ESPSystem.SetEnabled(state)
 	if destroyed then return end
 	Config.Enabled = state == true
 	if Config.Enabled and initialized and not Connections.RenderStepped then
-		Connections.RenderStepped = RunService.RenderStepped:Connect(UpdateESP)
+		Connections.RenderStepped = ConnectRender()
 	elseif not Config.Enabled then
 		if Connections.RenderStepped then Connections.RenderStepped:Disconnect() end
 		Connections.RenderStepped = nil
@@ -461,6 +482,8 @@ function ESPSystem.GetTracers() return Config.Tracers end
 function ESPSystem.GetHealth() return Config.Health end
 function ESPSystem.GetUseTeamColor() return Config.UseTeamColor end
 function ESPSystem.GetColor() return Config.Color end
+
+function ESPSystem.GetMetrics() return table.clone(metrics) end
 
 function ESPSystem.GetConfig()
 	local copy = {}

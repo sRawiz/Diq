@@ -1,5 +1,22 @@
--- Diq bootstrap: load, validate, initialize, then build the UI.
-local BASE_URL = "https://raw.githubusercontent.com/sRawiz/Diq/main/"
+-- Options can supply Sources/Factories for local tests or a self-contained build.
+-- Remote sessions resolve main once, then fetch every module from that commit.
+local StartupOptions = ...
+if type(StartupOptions) ~= "table" then StartupOptions = type(_G.DiqOptions) == "table" and _G.DiqOptions or {} end
+local revision = StartupOptions.Revision
+local function ReadSource(name)
+	if StartupOptions.Sources then
+		assert(type(StartupOptions.Sources[name]) == "string", "Local module missing: " .. name)
+		return StartupOptions.Sources[name]
+	end
+	if not revision then
+		local response = game:HttpGet("https://api.github.com/repos/sRawiz/Diq/commits/main")
+		local metadata = game:GetService("HttpService"):JSONDecode(response)
+		revision = metadata.sha
+	end
+	assert(type(revision) == "string" and #revision == 40 and revision:match("^%x+$"),
+		"Provide DiqOptions.Revision as a full commit SHA or use the bundled release")
+	return game:HttpGet("https://raw.githubusercontent.com/sRawiz/Diq/" .. revision .. "/" .. name .. ".lua")
+end
 
 if type(_G.DiqCleanup) == "function" then
 	local ok, err = pcall(_G.DiqCleanup)
@@ -12,6 +29,9 @@ local cleanup
 cleanup = function()
 	if App.Destroyed then return end
 	App.Destroyed = true
+	-- Stop queued UI/actions before restoring feature state.
+	if App.Runtime then App.Runtime.Scope:Remove("Actions") end
+	if App.Runtime then App.Runtime.Input:Destroy() end
 	for i = #App.Modules, 1, -1 do
 		local entry = App.Modules[i]
 		local ok, err = pcall(function() entry.Module:Destroy() end)
@@ -20,6 +40,17 @@ cleanup = function()
 	if _G.DiqCleanup == cleanup then _G.DiqCleanup = nil end
 end
 _G.DiqCleanup = cleanup
+App.Destroy = cleanup
+function App:GetDiagnostics()
+	local result = { Destroyed = self.Destroyed, Revision = revision or "bundled/local", Tasks = {}, Features = {} }
+	if self.Runtime then
+		for name, stats in self.Runtime.Scheduler.stats do result.Tasks[name] = table.clone(stats) end
+	end
+	for _, entry in self.Modules do
+		if entry.Module.GetMetrics then result.Features[entry.Name] = entry.Module.GetMetrics() end
+	end
+	return result
+end
 
 local function TraceError(err)
 	return debug and debug.traceback and debug.traceback(tostring(err), 2) or tostring(err)
@@ -31,17 +62,20 @@ local function LoadModule(name, methods, optional)
 		if optional then warn(message); return nil end
 		error(message, 0)
 	end
-	local ok, source = pcall(function()
-		return game:HttpGet(BASE_URL .. name .. ".lua?_=" .. tostring(os.clock()))
-	end)
-	if App.Destroyed then error("[Diq] Startup cancelled", 0) end
-	if not ok then return fail("download", source) end
-	if type(source) ~= "string" or source == "" then return fail("download", "empty or invalid response") end
-	if type(loadstring) ~= "function" then return fail("compile", "loadstring is unavailable") end
-	local compiled, chunk, compileError = pcall(loadstring, source, "@Diq/" .. name)
-	if not compiled then return fail("compile", chunk) end
-	if not chunk then return fail("compile", compileError) end
-	local ran, result = xpcall(function() return chunk({ DeferInit = true }) end, TraceError)
+	local chunk = StartupOptions.Factories and StartupOptions.Factories[name]
+	if StartupOptions.Factories and type(chunk) ~= "function" then return fail("validation", "bundled module missing") end
+	if not chunk then
+		local ok, source = pcall(ReadSource, name)
+		if App.Destroyed then error("[Diq] Startup cancelled", 0) end
+		if not ok then return fail("download", "source unavailable; check network, commit SHA, or bundled release") end
+		if type(source) ~= "string" or source == "" then return fail("download", "empty or invalid response") end
+		if type(loadstring) ~= "function" then return fail("compile", "loadstring unavailable; use the bundled release") end
+		local compiled, compileError
+		compiled, chunk, compileError = pcall(loadstring, source, "@Diq/" .. name)
+		if not compiled then return fail("compile", chunk) end
+		if not chunk then return fail("compile", compileError) end
+	end
+	local ran, result = xpcall(function() return chunk({ DeferInit = true, Runtime = App.Runtime }) end, TraceError)
 	if App.Destroyed then
 		if ran and type(result) == "table" and type(result.Destroy) == "function" then
 			pcall(function() result:Destroy() end)
@@ -61,6 +95,10 @@ local function LoadModule(name, methods, optional)
 end
 
 local function Start()
+	local Infrastructure = LoadModule("Infrastructure", { "new" })
+	App.Runtime = Infrastructure.new()
+	table.insert(App.Modules, { Name = "Infrastructure", Module = App.Runtime })
+	App.Actions = App.Runtime.Scope:Add(App.Runtime:CreateScope(), "Actions")
 	local DiqUI = LoadModule("DiqUILib", { "CreateWindow", "Destroy", "LoadIcons", "Notify" })
 	local DiqIcons = LoadModule("DiqIcons", {  }, true)
 	local Movement = LoadModule("MovementSystem", { "Destroy", "Init", "ResetCharacter", "SetCFrameSpeed", "SetFly", "SetFlySpeed", "SetInfinityJump", "SetNoClip", "SetNoFling", "SetSpeed", "Unanchor" })
@@ -137,7 +175,7 @@ local function Start()
 		}
 	})
 
-	movementTab:CreateToggle("Infinite Jump", false, function(state)
+	local jumpToggle = movementTab:CreateToggle("Infinite Jump", false, function(state)
 		Movement.SetInfinityJump(state)
 	end, { Icon = "chevron-up" })
 
@@ -172,6 +210,13 @@ local function Start()
 			Default = Enum.KeyCode.B,
 		}
 	})
+	Movement.SetStateListener(function(state)
+		flyToggle:Set(state.IsFlying, true)
+		speedToggle:Set(state.IsCFrameSpeed, true)
+		noClipToggle:Set(state.IsNoClip, true)
+		noFlingToggle:Set(state.IsNoFling, true)
+		jumpToggle:Set(state.IsInfinityJump, true)
+	end)
 
 	movementTab:CreateLabel("ACTIONS")
 
@@ -327,15 +372,16 @@ local function Start()
 
 	-- Get Executor Name
 	local executorName = "Unknown"
-	if identifyexecutor then
-		executorName = identifyexecutor()
+	if type(identifyexecutor) == "function" then
+		local success, name = pcall(identifyexecutor)
+		if success and type(name) == "string" then executorName = name end
 	end
 
 	-- สร้างการ์ดโปรไฟล์ที่มีรูป Avatar
 	settingsTab:CreateProfileCard(
-		game.Players.LocalPlayer.Name,
+		game:GetService("Players").LocalPlayer.Name,
 		executorName,
-		game.Players.LocalPlayer.UserId
+		game:GetService("Players").LocalPlayer.UserId
 	)
 
 	settingsTab:CreateLabel("WINDOW SHORTCUT")
@@ -347,18 +393,21 @@ local function Start()
 
 	settingsTab:CreateLabel("UTILITY")
 
-	settingsTab:CreateToggle("Anti-AFK (Prevent Idle Kick)", false, function(state)
-		Misc.SetAntiAFK(state)
-		if state then
-			DiqUI:Notify("Anti-AFK Enabled", "You will no longer be kicked for idling.", 3, "success")
+	local antiAfkToggle
+	antiAfkToggle = settingsTab:CreateToggle("Anti-AFK (Prevent Idle Kick)", false, function(state)
+		local ok, reason = Misc.SetAntiAFK(state)
+		if not ok then
+			antiAfkToggle:Set(false, true)
+			DiqUI:Notify("Anti-AFK unavailable", reason, 3, "warning")
 		end
 	end, { Icon = "coffee" })
+	Misc.SetStateListener(function(state) antiAfkToggle:Set(state.IsAntiAFK, true) end)
 
 	settingsTab:CreateLabel("SERVER MANAGEMENT")
 
 	settingsTab:CreateButton("Rejoin Server", function()
 		DiqUI:Notify("Server", "Rejoining the current server...", 3, "info")
-		task.delay(0.5, function()
+		App.Actions:Delay(0.5, function()
 			if not App.Destroyed then Misc.Rejoin() end
 		end)
 	end, { Icon = "rotate-cw" })
@@ -367,7 +416,6 @@ local function Start()
 
 	settingsTab:CreateButton("Reset All Settings", function()
 		MyWindow:ResetAll()
-		task.wait(0.15) -- รอให้ระบบปิดแจ้งเตือนจังหวะ Reset ทำงานเสร็จก่อน
 		DiqUI:Notify("Reset Complete", "All settings restored to defaults", 3, "success")
 	end, { Icon = "rotate-ccw" })
 
@@ -385,8 +433,11 @@ local function Start()
 
 end
 
+
 local ok, err = xpcall(Start, TraceError)
 if not ok then
 	cleanup()
 	warn("[Diq] Startup failed: " .. tostring(err))
+	return nil, err
 end
+return App

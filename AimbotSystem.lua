@@ -1,5 +1,6 @@
 -- Client aim controller. Main may load this with { DeferInit = true }.
 local ModuleOptions = ...
+local Runtime = type(ModuleOptions) == "table" and ModuleOptions.Runtime
 local AimbotSystem = {}
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -28,6 +29,7 @@ local lastAimDirection, lastCamera
 local challenger, challengerTime = nil, 0
 local scanElapsed = 0
 local SCAN_INTERVAL = 0.1
+local metrics = { Scans = 0, Evaluations = 0, Raycasts = 0 }
 local status = "Disabled"
 local rejected = {}
 local connections = {}
@@ -36,6 +38,10 @@ local bindingName = "DiqAim_" .. tostring({})
 local rayParams = RaycastParams.new()
 rayParams.FilterType = Enum.RaycastFilterType.Exclude
 rayParams.IgnoreWater = true
+
+local function connectInput(name, callback)
+	return Runtime and Runtime.Input:Connect(name, callback) or Input[name]:Connect(callback)
+end
 
 local function updateStatusLabel()
 	if statusLabel then
@@ -49,12 +55,13 @@ local function updateStatusLabel()
 	end
 end
 
-local function releaseTarget()
+local function releaseTarget(resetScan)
 	currentPlayer, currentPart, aiming = nil, nil, false
 	lastAimDirection = nil
 	nextRequested = false
 	cycleOrder = nil
-	challenger, challengerTime, scanElapsed = nil, 0, 0
+	challenger, challengerTime = nil, 0
+	if resetScan ~= false then scanElapsed = SCAN_INTERVAL end
 	updateStatusLabel()
 end
 
@@ -103,12 +110,14 @@ local function matchesActivation(input)
 end
 
 local function evaluate(player, camera, origin)
+	metrics.Evaluations += 1
 	if player == LocalPlayer or player.Parent ~= Players then return nil end
 	if Config.TeamCheck and not LocalPlayer.Neutral and not player.Neutral
 		and player.Team ~= nil and player.Team == LocalPlayer.Team then return reject("Same team") end
 	local character = player.Character
 	if not character or not character:IsDescendantOf(workspace) then return reject("Character unavailable") end
-	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	local record = Runtime and Runtime.Registry:Get(player)
+	local humanoid = record and record.Humanoid or character:FindFirstChildOfClass("Humanoid")
 	if not humanoid or humanoid.Health <= 0 then return reject("No living Humanoid") end
 	local part = getPart(character)
 	if not part then return reject("Aim part unavailable") end
@@ -120,6 +129,7 @@ local function evaluate(player, camera, origin)
 	local distance = (point - origin).Magnitude
 	if distance > Config.FOVRadius then return reject("Outside FOV") end
 	if Config.WallCheck then
+		metrics.Raycasts += 1
 		local hit = workspace:Raycast(camera.CFrame.Position, direction, rayParams)
 		if hit and not hit.Instance:IsDescendantOf(character) then return reject("Blocked by wall") end
 	end
@@ -147,7 +157,8 @@ local function selectTarget(camera, origin, dt)
 	if nextRequested then
 		nextRequested = false
 		local candidates = {}
-		for _, player in ipairs(Players:GetPlayers()) do
+		metrics.Scans += 1
+		for _, player in ipairs(Runtime and Runtime.Registry:GetPlayers() or Players:GetPlayers()) do
 			local part, point, distance = evaluate(player, camera, origin)
 			if part then
 				table.insert(candidates, { Player = player, Part = part, Point = point,
@@ -181,10 +192,13 @@ local function selectTarget(camera, origin, dt)
 		return nil
 	end
 	local part, point, distance
+	local hadTarget = currentPlayer ~= nil
 	if currentPlayer then part, point, distance = evaluate(currentPlayer, camera, origin) end
-	if not part then releaseTarget() end
+	if not part then releaseTarget(false) end
 	local currentScore = part and scoreTarget(part, distance, camera) or math.huge
 	scanElapsed = scanElapsed + math.clamp(dt, 0, 0.1)
+	-- Invalid locks are replaced immediately; repeated empty scans stay bounded.
+	if not part and not hadTarget and scanElapsed < SCAN_INTERVAL then return nil end
 	-- Validate the current target every frame, but search challengers at 10 Hz.
 	if part and (not Config.AutoSwitch or Config.TargetMode == "Sticky" or scanElapsed < SCAN_INTERVAL) then
 		return part, point
@@ -192,7 +206,8 @@ local function selectTarget(camera, origin, dt)
 	local elapsed = scanElapsed
 	scanElapsed = 0
 	local bestPlayer, bestPart, bestPoint, bestScore = currentPlayer, part, point, currentScore
-	for _, player in ipairs(Players:GetPlayers()) do
+	metrics.Scans += 1
+	for _, player in ipairs(Runtime and Runtime.Registry:GetPlayers() or Players:GetPlayers()) do
 		if player ~= currentPlayer then
 			local candidate, screen, screenDistance = evaluate(player, camera, origin)
 			if candidate then
@@ -311,7 +326,8 @@ local function step(dt)
 		lastAimDirection = camera.CFrame.LookVector
 	else
 		local delta = (point - origin) * alpha
-		local ok, err = pcall(mousemoverel, delta.X, delta.Y)
+		local moveMouse = Runtime and Runtime.Adapters.MoveMouse or mousemoverel
+		local ok, err = pcall(moveMouse, delta.X, delta.Y)
 		if not ok then
 			Config.AimMethod = "Camera"
 			releaseTarget()
@@ -348,7 +364,7 @@ function AimbotSystem.Init()
 	initialized = true
 	local ok, err = pcall(function()
 		createOverlay()
-		table.insert(connections, Input.InputBegan:Connect(function(input, processed)
+		table.insert(connections, connectInput("InputBegan", function(input, processed)
 			if inputSuspended or processed or not focused or GuiService.MenuIsOpen or Input:GetFocusedTextBox() ~= nil then return end
 			if simpleControls then
 				if matchesActivation(input) then AimbotSystem.SetEnabled(not Config.Enabled) end
@@ -364,14 +380,14 @@ function AimbotSystem.Init()
 			status = held and "Searching" or "Waiting for " .. Config.ActivationKey
 			releaseTarget()
 		end))
-		table.insert(connections, Input.InputEnded:Connect(function(input)
+		table.insert(connections, connectInput("InputEnded", function(input)
 			if Config.ActivationMode == "Hold" and matchesActivation(input) then held = false; releaseTarget() end
 		end))
-		table.insert(connections, Input.WindowFocusReleased:Connect(function()
+		table.insert(connections, connectInput("WindowFocusReleased", function()
 			focused = false; held = false; releaseTarget()
 			if simpleControls then AimbotSystem.SetEnabled(false) end
 		end))
-		table.insert(connections, Input.WindowFocused:Connect(function() focused = true end))
+		table.insert(connections, connectInput("WindowFocused", function() focused = true end))
 		table.insert(connections, LocalPlayer.CharacterAdded:Connect(function()
 			held = false; releaseTarget()
 			if simpleControls then AimbotSystem.SetEnabled(false) end
@@ -533,6 +549,7 @@ function AimbotSystem.GetTeamCheck() return Config.TeamCheck end
 function AimbotSystem.IsAiming() return aiming end
 function AimbotSystem.GetCurrentTarget() return currentPart end
 function AimbotSystem.GetConfig() return table.clone(Config) end
+function AimbotSystem.GetMetrics() return table.clone(metrics) end
 
 if type(ModuleOptions) ~= "table" or not ModuleOptions.DeferInit then AimbotSystem.Init() end
 return AimbotSystem

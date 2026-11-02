@@ -90,7 +90,12 @@ A.Init(); A.Init()
 assert(#Input.InputBegan.listeners==1,'Init must be idempotent')
 local function tick(dt) for _,fn in pairs(RunService.bindings) do fn(dt or 1/60) end end
 local function press() Input.InputBegan:Fire({UserInputType=2},false) end
-local function target(expected,label) tick(); assert(A.GetCurrentTarget()==expected,label) end
+local function target(expected,label)
+ tick()
+ -- Empty-target acquisition has a documented 100 ms scan budget.
+ if expected and A.GetCurrentTarget()==nil then tick(0.1) end
+ assert(A.GetCurrentTarget()==expected,label)
+end
 A.SetTargetMode('Sticky')
 A.SetActivationKey('MouseButton2'); A.SetActivationMode('Hold')
 A.SetEnabled(true); A.SetShowFOV(true); press()
@@ -327,6 +332,11 @@ assert(not A.IsEnabled(),'typing cannot enable assist'); Input.textbox=nil
 A.SetEnabled(true); LocalPlayer.CharacterAdded:Fire()
 assert(not A.IsEnabled() and notified[#notified]==false,'respawn synchronizes simple state')
 A.SetEnabled(true)
+Players.list={LocalPlayer}
+tick()
+local scans=A.GetMetrics().Scans
+for _=1,120 do tick(1/120) end
+assert(A.GetMetrics().Scans-scans<=11,'empty-target scans must be bounded independently of render FPS')
 A.Destroy(); A.Destroy()
 assert(next(RunService.bindings)==nil and A.GetCurrentTarget()==nil,'destroy removes binding and lock')
 for _,sig in ipairs({Input.InputBegan,Input.InputEnded,Input.WindowFocusReleased,Input.WindowFocused,LocalPlayer.CharacterAdded}) do

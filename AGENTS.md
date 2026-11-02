@@ -3,7 +3,7 @@
 ## Runtime and scope
 - Work directly on the Lua files in this repository using Codex. Roblox Studio and Studio MCP are not required for this workflow; do not configure them unless the user requests it.
 - The current entry point is Main.lua, loaded on the client through an executor. Keep this runtime in mind rather than assuming a standard Studio LocalScript or server Script.
-- Use the installed roblox-dev-skill for Luau language and standard Roblox API references. Its Studio placement and MCP workflows do not override the runtime described here.
+- Use Roblox Creator Docs and official Luau documentation directly for language and engine references. Do not use community skills. Documentation does not override the executor runtime described here.
 - Distinguish standard Luau, Roblox client APIs, privileged Studio APIs, and executor-specific globals. Do not assume executor functions exist or behave identically across executors. Check capabilities where needed and report actionable failures.
 - Keep existing module return values, public methods, and loading conventions compatible. Do not convert the project to Studio ModuleScripts unless requested.
 

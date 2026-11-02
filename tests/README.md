@@ -1,4 +1,20 @@
-# Aim Assist verification
+# Diq verification
+
+## Infrastructure รุ่นใหม่
+
+ดูสัญญา runtime, build และ lifecycle ใน [architecture.md](../docs/architecture.md)
+
+```powershell
+python tests/run_infrastructure.py --luau-dir C:/path/to/luau
+python tools/build.py
+```
+
+ชุดทดสอบ compile source และ bundle แล้วรัน production infrastructure, feature modules,
+UI และ Main ด้วย engine mocks ตรวจ startup failure, การโหลด SHA เดียว,
+การเปิดซ้ำ, property ownership, respawn, input cleanup และ no-op updates
+ไฟล์ `dist/Diq.lua` เป็นผล build จาก local source และไม่โหลดโมดูลจาก GitHub ขณะรัน
+หากใช้ Main แบบ remote ต้องอัปโหลด Infrastructure.lua และไฟล์ที่แก้ทั้งหมดใน commit เดียวกัน
+การย้าย Movement/Hitbox ไป PreSimulation และความหน่วง acquisition ประมาณ 100 ms ต้องตรวจใน runtime จริงเพิ่มเติม
 
 ## ESP รุ่นปรับปรุง
 

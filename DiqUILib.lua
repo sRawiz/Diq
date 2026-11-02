@@ -1,3 +1,5 @@
+local ModuleOptions = ...
+local Runtime = type(ModuleOptions) == "table" and ModuleOptions.Runtime
 -- ==========================================
 -- 🎨 Diq UI Library v3.0 (Refactored)
 -- ==========================================
@@ -61,25 +63,78 @@ end
 -- ==========================================
 
 -- ระบบจัดการ Connection ป้องกัน Memory Leak
-local function CreateConnectionTracker()
-	local tracker = { _list = {} }
+local function ConnectInput(name, callback)
+	return Runtime and Runtime.Input:Connect(name, callback) or UserInputService[name]:Connect(callback)
+end
 
-	function tracker:Track(connection)
-		table.insert(self._list, connection)
-		return connection
+local function CreateConnectionTracker(parent)
+	local tracker = { _list = {}, Alive = true }
+	function tracker:Track(item)
+		if not self.Alive then
+			if type(item) == "function" then item()
+			elseif item.Disconnect then item:Disconnect()
+			else item:DisconnectAll() end
+			return item
+		end
+		self._list[item] = true
+		return item
 	end
-
+	function tracker:Invoke(callback, ...)
+		if not self.Alive then return end
+		local args = table.pack(...)
+		local thread
+		thread = coroutine.create(function()
+			local ok = pcall(callback, table.unpack(args, 1, args.n))
+			self._list[thread] = nil
+			if not ok then warn("[Diq] UI callback failed") end
+		end)
+		self._list[thread] = true
+		-- Non-yielding setters finish synchronously. Yielding user callbacks do
+		-- not block the input dispatcher and remain cancellable by their owner.
+		local ok = coroutine.resume(thread)
+		if not ok then self._list[thread] = nil; warn("[Diq] UI callback could not start") end
+	end
+	function tracker:Once(event, callback)
+		local connection
+		connection = event:Once(function(...)
+			self._list[connection] = nil
+			self:Invoke(callback, ...)
+		end)
+		return self:Track(connection)
+	end
+	function tracker:Delay(seconds, callback, ...)
+		if not self.Alive then return end
+		local args = table.pack(...)
+		local thread
+		thread = task.delay(seconds, function()
+			-- Keep in the set while yielding so Destroy can still cancel it.
+			if self.Alive then self:Invoke(callback, table.unpack(args, 1, args.n)) end
+			self._list[thread] = nil
+		end)
+		self._list[thread] = true
+		return thread
+	end
+	function tracker:Spawn(callback, ...) return self:Delay(0, callback, ...) end
 	function tracker:DisconnectAll()
-		for _, conn in self._list do
-			if typeof(conn) == "RBXScriptConnection" and conn.Connected then
-				conn:Disconnect()
-			end
+		if not self.Alive then return end
+		self.Alive = false
+		if parent then parent._list[self] = nil end
+		for item in self._list do
+			pcall(function()
+				if type(item) == "function" then item()
+				elseif type(item) == "thread" then
+					if item ~= coroutine.running() and coroutine.status(item) ~= "dead" then task.cancel(item) end
+				elseif item.Disconnect then item:Disconnect()
+				else item:DisconnectAll() end
+			end)
 		end
 		table.clear(self._list)
 	end
-
+	if parent then parent:Track(tracker) end
 	return tracker
 end
+
+local notificationTasks = CreateConnectionTracker()
 
 -- Tween Helper
 local function Tween(obj, duration, props, style, dir)
@@ -181,7 +236,7 @@ local function MakeDraggable(dragPart, mainFrame, tracker)
 		end
 	end))
 
-	tracker:Track(UserInputService.InputChanged:Connect(function(input)
+	tracker:Track(ConnectInput("InputChanged", function(input)
 		if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement
 			or input.UserInputType == Enum.UserInputType.Touch) then
 			local delta = input.Position - dragStart
@@ -285,13 +340,13 @@ function Diq:Notify(title, message, duration, notifType)
 	Tween(notif, 0.35, { BackgroundTransparency = 0 })
 
 	-- หายไปอัตโนมัติ
-	task.delay(duration, function()
+	notificationTasks:Delay(duration, function()
 		if notif and notif.Parent then
 			local tw = Tween(notif, 0.3, {
 				BackgroundTransparency = 1,
 				Size = UDim2.new(1, 0, 0, 0),
 			})
-			tw.Completed:Once(function()
+			notificationTasks:Once(tw.Completed, function()
 				if notif then notif:Destroy() end
 			end)
 		end
@@ -313,6 +368,8 @@ function Diq:CreateWindow(config)
 	end
 	config = config or {}
 	local destroyed = false
+	notificationTasks:DisconnectAll()
+	notificationTasks = CreateConnectionTracker()
 	local keyCaptureOwner = nil
 
 	local windowTitle = config.Title or "Diq Panel"
@@ -334,16 +391,49 @@ function Diq:CreateWindow(config)
 	local activeTab = nil
 	local isVisible = true
 	local isMinimized = false
-	Window._elements = {} -- เก็บ element ทุกตัวที่มี state เพื่อไว้ทำ Reset
+	Window._elements = {}
+	local function RegisterElement(obj, tracker)
+		local destroy = obj.Destroy
+		tracker:Track(function()
+			local index = table.find(Window._elements, obj)
+			if index then table.remove(Window._elements, index) end
+			if destroy then destroy() end
+		end)
+		obj.Destroy = function() tracker:DisconnectAll() end
+		for _, key in { "Set", "Reset", "SetText", "SetVisible", "SetOptions" } do
+			local method = obj[key]
+			if method then
+				obj[key] = function(...)
+					if tracker.Alive then return method(...) end
+				end
+			end
+		end
+	end
+	local activeDrag
+	connections:Track(ConnectInput("InputChanged", function(input)
+		if activeDrag and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+			activeDrag.update(input)
+		end
+	end))
+	connections:Track(ConnectInput("InputEnded", function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then activeDrag = nil end
+	end))
+	local function BindSliderDrag(hitArea, tracker, update)
+		local drag = { update = update }
+		tracker:Track(hitArea.InputBegan:Connect(function(input)
+			if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+				activeDrag = drag; update(input)
+			end
+		end))
+		tracker:Track(function() if activeDrag == drag then activeDrag = nil end end)
+	end
 	
 	function Window:ResetAll()
 		Diq.SuppressNotifications = true
-		for _, element in ipairs(self._elements) do
+		for _, element in ipairs(table.clone(self._elements)) do
 			if element.Reset then element:Reset() end
 		end
-		task.delay(0.1, function()
-			Diq.SuppressNotifications = false
-		end)
+		Diq.SuppressNotifications = false
 	end
 
 	-- ==========================================
@@ -659,6 +749,7 @@ function Diq:CreateWindow(config)
 		-- 📝 CreateLabel — หัวข้อหมวดหมู่
 		-- ======================================
 		function Tab:CreateLabel(text)
+			local connections = CreateConnectionTracker((self and self._tracker) or connections)
 			local obj = {}
 			local targetParent = (self and self._content) or content
 
@@ -690,6 +781,7 @@ function Diq:CreateWindow(config)
 			function obj:SetText(t) lbl.Text = t end
 			function obj:SetVisible(v) frame.Visible = v end
 			function obj:Destroy() frame:Destroy() end
+			RegisterElement(obj, connections)
 			return obj
 		end
 
@@ -697,6 +789,7 @@ function Diq:CreateWindow(config)
 		-- 💳 CreateProfileCard — การ์ดโปรไฟล์มีรูป Avatar พร้อม Map และ Play Time
 		-- ======================================
 		function Tab:CreateProfileCard(playerName, executorName, userId)
+			local connections = CreateConnectionTracker((self and self._tracker) or connections)
 			local obj = {}
 			local targetParent = (self and self._content) or content
 			local sessionStart = os.clock()
@@ -766,10 +859,11 @@ function Diq:CreateWindow(config)
 			timeLbl.Parent = frame
 
 			-- ดึงชื่อ Map แบบ Asynchronous
-			task.spawn(function()
+			connections:Spawn(function()
 				local success, info = pcall(function()
 					return game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId)
 				end)
+				if not connections.Alive then return end
 				if success and info and info.Name then
 					mapLbl.Text = "Map: " .. info.Name
 				else
@@ -778,7 +872,7 @@ function Diq:CreateWindow(config)
 			end)
 
 			-- อัปเดตเวลา Session Time (เดินตลอดเวลา)
-			task.spawn(function()
+			connections:Spawn(function()
 				while task.wait(1) do
 					if not frame.Parent then break end -- กัน Memory Leak ถ้า UI โดนลบ
 					local elapsed = os.clock() - sessionStart
@@ -791,6 +885,7 @@ function Diq:CreateWindow(config)
 
 			function obj:SetVisible(v) frame.Visible = v end
 			function obj:Destroy() frame:Destroy() end
+			RegisterElement(obj, connections)
 			return obj
 		end
 
@@ -798,6 +893,7 @@ function Diq:CreateWindow(config)
 		-- 📦 CreateSection — กล่องจัดกลุ่ม (Unified Container)
 		-- ======================================
 		function Tab:CreateSection(title)
+			local connections = CreateConnectionTracker((self and self._tracker) or connections)
 			local Section = {}
 			setmetatable(Section, { __index = Tab })
 
@@ -839,6 +935,8 @@ function Diq:CreateWindow(config)
 				sectionFrame.Size = UDim2.new(1, 0, 0, sectionLayout.AbsoluteContentSize.Y)
 			end))
 
+			Section._tracker = connections
+			Section.Destroy = function() connections:DisconnectAll(); sectionFrame:Destroy() end
 			Section._content = sectionFrame
 			Section._isSection = true
 			Section._itemCount = 0
@@ -849,6 +947,7 @@ function Diq:CreateWindow(config)
 		-- 🔘 CreateButton — ปุ่มกด (มี debounce)
 		-- ======================================
 		function Tab:CreateButton(text, callback, config)
+			local connections = CreateConnectionTracker((self and self._tracker) or connections)
 			local obj = {}
 			local targetParent = (self and self._content) or content
 			local debounce = false
@@ -902,10 +1001,12 @@ function Diq:CreateWindow(config)
 				-- Click animation (ย่อ-ขยาย)
 				Tween(frame, 0.08, { Size = UDim2.new(0.97, 0, 0, 33) })
 				task.wait(0.08)
+				if not connections.Alive then return end
 				Tween(frame, 0.12, { Size = UDim2.new(1, 0, 0, 36) })
 
-				if callback then task.spawn(callback) end
+				if callback then connections:Invoke(callback) end
 				task.wait(0.2)
+				if not connections.Alive then return end
 				debounce = false
 			end))
 
@@ -913,6 +1014,7 @@ function Diq:CreateWindow(config)
 			function obj:SetCallback(fn) callback = fn end
 			function obj:SetVisible(v) frame.Visible = v end
 			function obj:Destroy() frame:Destroy() end
+			RegisterElement(obj, connections)
 			return obj
 		end
 
@@ -920,6 +1022,7 @@ function Diq:CreateWindow(config)
 		-- 🔄 CreateToggle — สวิตช์เปิด/ปิด (รองรับ Keybind & Slider ในตัว)
 		-- ======================================
 		function Tab:CreateToggle(text, default, callback, config)
+			local connections = CreateConnectionTracker((self and self._tracker) or connections)
 			local obj = {}
 			local toggled = default or false
 			config = config or {}
@@ -984,6 +1087,7 @@ function Diq:CreateWindow(config)
 			end
 
 			-- KEYBIND (ถ้ามี)
+			connections:Track(function() if keyCaptureOwner == frame then keyCaptureOwner = nil end end)
 			local currentKey = config.Keybind and config.Keybind.Default
 			if config.Keybind then
 				local keyBtn = Instance.new("TextButton")
@@ -1001,23 +1105,26 @@ function Diq:CreateWindow(config)
 
 				local listening = false
 				connections:Track(keyBtn.MouseButton1Click:Connect(function()
+					if keyCaptureOwner then return end
+					keyCaptureOwner = frame
 					listening = true
 					keyBtn.Text = "..."
 					Tween(keyBtn, 0.2, { BackgroundColor3 = Theme.Accent, TextColor3 = Theme.Background })
 				end))
 
-				connections:Track(UserInputService.InputBegan:Connect(function(input, gp)
+				connections:Track(ConnectInput("InputBegan", function(input, gp)
 					if listening and input.UserInputType == Enum.UserInputType.Keyboard then
 						listening = false
+						connections:Spawn(function() if keyCaptureOwner == frame then keyCaptureOwner = nil end end)
 						currentKey = input.KeyCode
 						keyBtn.Text = "[" .. currentKey.Name .. "]"
 						Tween(keyBtn, 0.2, { BackgroundColor3 = Theme.Background, TextColor3 = Theme.SubText })
-						if config.Keybind.Callback then task.spawn(config.Keybind.Callback, currentKey) end
-					elseif not listening and input.KeyCode == currentKey and not gp then
+						if config.Keybind.Callback then connections:Invoke(config.Keybind.Callback, currentKey) end
+					elseif not listening and not keyCaptureOwner and not UserInputService:GetFocusedTextBox() and input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode == currentKey and not gp then
 						-- Auto toggle on hotkey!
 						toggled = not toggled
 						UpdateVisual()
-						if callback then task.spawn(callback, toggled) end
+						if callback then connections:Invoke(callback, toggled) end
 					end
 				end))
 			end
@@ -1028,7 +1135,6 @@ function Diq:CreateWindow(config)
 				local sMax = config.Slider.Max or 100
 				local sValue = math.clamp(config.Slider.Default or sMin, sMin, sMax)
 				local sCb = config.Slider.Callback
-				local sliding = false
 
 				local sliderArea = Instance.new("Frame")
 				sliderArea.Size = UDim2.new(1, 0, 0, 46)
@@ -1101,12 +1207,13 @@ function Diq:CreateWindow(config)
 				hitArea.Parent = sliderArea
 
 				local function UpdateSlider(newValue)
+					local previous = sValue
 					sValue = math.clamp(math.floor(newValue), sMin, sMax)
 					local ratio = (sValue - sMin) / math.max(sMax - sMin, 1)
 					fill.Size = UDim2.new(ratio, 0, 1, 0)
 					sKnob.Position = UDim2.new(ratio, -5, 0.5, -5)
 					valInput.Text = tostring(sValue)
-					if sCb then task.spawn(sCb, sValue) end
+					if sCb and previous ~= sValue then connections:Invoke(sCb, sValue) end
 				end
 
 				connections:Track(valInput.FocusLost:Connect(function()
@@ -1114,39 +1221,20 @@ function Diq:CreateWindow(config)
 					if parsed then UpdateSlider(parsed) else valInput.Text = tostring(sValue) end
 				end))
 
-				connections:Track(hitArea.InputBegan:Connect(function(input)
-					if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-						sliding = true
-						local ratio = math.clamp((input.Position.X - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
-						UpdateSlider(sMin + (sMax - sMin) * ratio)
-					end
-				end))
-
-				connections:Track(UserInputService.InputEnded:Connect(function(input)
-					if sliding and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
-						sliding = false
-					end
-				end))
-
-				-- ✅ Fix: เพิ่ม drag support (เดิมขาดไป ทำให้ลากไม่ได้)
-				connections:Track(UserInputService.InputChanged:Connect(function(input)
-					if sliding and (input.UserInputType == Enum.UserInputType.MouseMovement
-						or input.UserInputType == Enum.UserInputType.Touch) then
-						local ratio = math.clamp(
-							(input.Position.X - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1
-						)
-						UpdateSlider(sMin + (sMax - sMin) * ratio)
-					end
-				end))
+				BindSliderDrag(hitArea, connections, function(input)
+					if track.AbsoluteSize.X <= 0 then return end
+					local ratio = math.clamp((input.Position.X - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
+					UpdateSlider(sMin + (sMax - sMin) * ratio)
+				end)
 			end
 
 			connections:Track(btn.MouseButton1Click:Connect(function()
 				toggled = not toggled
 				UpdateVisual()
-				if callback then task.spawn(callback, toggled) end
+				if callback then connections:Invoke(callback, toggled) end
 			end))
 
-			function obj:Set(v, silent) toggled = v; UpdateVisual(); if callback and not silent then task.spawn(callback, toggled) end end
+			function obj:Set(v, silent) toggled = v; UpdateVisual(); if callback and not silent then connections:Invoke(callback, toggled) end end
 			function obj:Get() return toggled end
 			function obj:Reset() obj:Set(default or false) end
 			function obj:SetText(t) lbl.Text = t end
@@ -1154,6 +1242,7 @@ function Diq:CreateWindow(config)
 			function obj:Destroy() frame:Destroy() end
 			
 			table.insert(Window._elements, obj)
+			RegisterElement(obj, connections)
 			return obj
 		end
 
@@ -1161,9 +1250,9 @@ function Diq:CreateWindow(config)
 		-- 📏 CreateSlider — ปรับค่าตัวเลข
 		-- ======================================
 		function Tab:CreateSlider(text, min, max, default, callback)
+			local connections = CreateConnectionTracker((self and self._tracker) or connections)
 			local obj = {}
 			local value = math.clamp(default or min, min, max)
-			local sliding = false
 			local targetParent = (self and self._content) or content
 
 			local frame = Instance.new("Frame")
@@ -1235,12 +1324,13 @@ function Diq:CreateWindow(config)
 			hitArea.Parent = frame
 
 			local function UpdateSlider(newValue)
+				local previous = value
 				value = math.clamp(math.floor(newValue), min, max)
 				local ratio = (value - min) / math.max(max - min, 1)
 				fill.Size = UDim2.new(ratio, 0, 1, 0)
 				sliderKnob.Position = UDim2.new(ratio, -6, 0.5, -6)
 				valInput.Text = tostring(value)
-				if callback then task.spawn(callback, value) end
+				if callback and previous ~= value then connections:Invoke(callback, value) end
 			end
 
 			connections:Track(valInput.FocusLost:Connect(function()
@@ -1252,35 +1342,11 @@ function Diq:CreateWindow(config)
 				end
 			end))
 
-			connections:Track(hitArea.InputBegan:Connect(function(input)
-				if input.UserInputType == Enum.UserInputType.MouseButton1
-					or input.UserInputType == Enum.UserInputType.Touch then
-					sliding = true
-					local ratio = math.clamp(
-						(input.Position.X - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1
-					)
-					UpdateSlider(min + (max - min) * ratio)
-				end
-			end))
-
-			-- ปล่อย mouse ที่ไหนก็ได้ → หยุด slide
-			connections:Track(UserInputService.InputEnded:Connect(function(input)
-				if sliding and (input.UserInputType == Enum.UserInputType.MouseButton1
-					or input.UserInputType == Enum.UserInputType.Touch) then
-					sliding = false
-				end
-			end))
-
-			-- ลาก mouse → อัพเดทค่า
-			connections:Track(UserInputService.InputChanged:Connect(function(input)
-				if sliding and (input.UserInputType == Enum.UserInputType.MouseMovement
-					or input.UserInputType == Enum.UserInputType.Touch) then
-					local ratio = math.clamp(
-						(input.Position.X - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1
-					)
-					UpdateSlider(min + (max - min) * ratio)
-				end
-			end))
+			BindSliderDrag(hitArea, connections, function(input)
+				if track.AbsoluteSize.X <= 0 then return end
+				local ratio = math.clamp((input.Position.X - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
+				UpdateSlider(min + (max - min) * ratio)
+			end)
 
 			function obj:Set(v) UpdateSlider(v) end
 			function obj:Get() return value end
@@ -1290,6 +1356,7 @@ function Diq:CreateWindow(config)
 			function obj:Destroy() frame:Destroy() end
 			
 			table.insert(Window._elements, obj)
+			RegisterElement(obj, connections)
 			return obj
 		end
 
@@ -1297,6 +1364,7 @@ function Diq:CreateWindow(config)
 		-- 📋 CreateDropdown — เลือกจากรายการ
 		-- ======================================
 		function Tab:CreateDropdown(text, options, default, callback)
+			local connections = CreateConnectionTracker((self and self._tracker) or connections)
 			local obj = {}
 			local selected = default or (options and options[1]) or ""
 			local isOpen = false
@@ -1371,8 +1439,11 @@ function Diq:CreateWindow(config)
 			ApplyPadding(dropList, 4, 4, 4, 4)
 
 			local optionBtns = {}
+			local optionConnections
 
 			local function BuildOptions()
+				if optionConnections then optionConnections:DisconnectAll() end
+				optionConnections = CreateConnectionTracker(connections)
 				for _, b in optionBtns do b:Destroy() end
 				table.clear(optionBtns)
 
@@ -1390,18 +1461,18 @@ function Diq:CreateWindow(config)
 					optBtn.Parent = dropList
 					ApplyCorner(optBtn, 4)
 
-					connections:Track(optBtn.MouseEnter:Connect(function()
+					optionConnections:Track(optBtn.MouseEnter:Connect(function()
 						if opt ~= selected then
 							Tween(optBtn, 0.15, { BackgroundTransparency = 0, BackgroundColor3 = Theme.HoverBg })
 						end
 					end))
-					connections:Track(optBtn.MouseLeave:Connect(function()
+					optionConnections:Track(optBtn.MouseLeave:Connect(function()
 						if opt ~= selected then
 							Tween(optBtn, 0.15, { BackgroundTransparency = 0.5 })
 						end
 					end))
 
-					connections:Track(optBtn.MouseButton1Click:Connect(function()
+					optionConnections:Track(optBtn.MouseButton1Click:Connect(function()
 						selected = opt
 						selText.Text = selected
 
@@ -1418,11 +1489,11 @@ function Diq:CreateWindow(config)
 						isOpen = false
 						if dropIcon then Tween(dropIcon, 0.2, { Rotation = 0 }) end
 						local tw = Tween(dropList, 0.2, { Size = UDim2.new(0.5, -10, 0, 0) })
-						tw.Completed:Once(function()
+						connections:Once(tw.Completed, function()
 							dropList.Visible = false
 						end)
 
-						if callback then task.spawn(callback, selected) end
+						if callback then connections:Invoke(callback, selected) end
 					end))
 
 					table.insert(optionBtns, optBtn)
@@ -1442,7 +1513,7 @@ function Diq:CreateWindow(config)
 					Tween(dropList, 0.2, { Size = UDim2.new(0.5, -10, 0, targetH) })
 				else
 					local tw = Tween(dropList, 0.2, { Size = UDim2.new(0.5, -10, 0, 0) })
-					tw.Completed:Once(function() dropList.Visible = false end)
+					connections:Once(tw.Completed, function() dropList.Visible = false end)
 				end
 			end))
 
@@ -1455,7 +1526,7 @@ function Diq:CreateWindow(config)
 						BackgroundTransparency = match and 0 or 0.5,
 					})
 				end
-				if callback then task.spawn(callback, selected) end
+				if callback then connections:Invoke(callback, selected) end
 			end
 			function obj:Get() return selected end
 			function obj:Reset() obj:Set(default or (options and options[1]) or "") end
@@ -1464,6 +1535,7 @@ function Diq:CreateWindow(config)
 			function obj:Destroy() frame:Destroy() end
 			
 			table.insert(Window._elements, obj)
+			RegisterElement(obj, connections)
 			return obj
 		end
 
@@ -1471,6 +1543,7 @@ function Diq:CreateWindow(config)
 		-- ✏️ CreateInput — ช่องพิมพ์ข้อความ
 		-- ======================================
 		function Tab:CreateInput(text, placeholder, callback)
+			local connections = CreateConnectionTracker((self and self._tracker) or connections)
 			local obj = {}
 			local targetParent = (self and self._content) or content
 
@@ -1515,7 +1588,7 @@ function Diq:CreateWindow(config)
 
 			connections:Track(inputBox.FocusLost:Connect(function(enterPressed)
 				Tween(inputStroke, 0.2, { Color = Theme.Outline })
-				if callback then task.spawn(callback, inputBox.Text, enterPressed) end
+				if callback then connections:Invoke(callback, inputBox.Text, enterPressed) end
 			end))
 
 			function obj:Set(t) inputBox.Text = t end
@@ -1526,6 +1599,7 @@ function Diq:CreateWindow(config)
 			function obj:Destroy() frame:Destroy() end
 			
 			table.insert(Window._elements, obj)
+			RegisterElement(obj, connections)
 			return obj
 		end
 
@@ -1533,6 +1607,7 @@ function Diq:CreateWindow(config)
 		-- ⌨️ CreateKeybind — ตั้งค่าปุ่มลัด
 		-- ======================================
 		function Tab:CreateKeybind(text, default, callback, options)
+			local connections = CreateConnectionTracker((self and self._tracker) or connections)
 			options = options or {}
 			local obj = {}
 			local currentKey = default or Enum.KeyCode.Unknown
@@ -1579,7 +1654,7 @@ function Diq:CreateWindow(config)
 				Tween(kbStroke, 0.2, { Color = Theme.Accent })
 			end))
 
-			connections:Track(UserInputService.InputBegan:Connect(function(input, gameProcessed)
+			connections:Track(ConnectInput("InputBegan", function(input, gameProcessed)
 				if listening then
 					if input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode ~= Enum.KeyCode.Unknown then
 						if input.KeyCode == Enum.KeyCode.Escape then
@@ -1591,7 +1666,7 @@ function Diq:CreateWindow(config)
 							if options.OnChanged then options.OnChanged(currentKey) end
 						end
 						listening = false
-						task.defer(function()
+						connections:Spawn(function()
 							if keyCaptureOwner == frame then keyCaptureOwner = nil end
 							if options.OnListeningChanged then options.OnListeningChanged(false) end
 						end)
@@ -1602,7 +1677,7 @@ function Diq:CreateWindow(config)
 					if not gameProcessed and not keyCaptureOwner and not UserInputService:GetFocusedTextBox()
 						and input.UserInputType == Enum.UserInputType.Keyboard
 						and input.KeyCode == currentKey then
-						if callback then task.spawn(callback, currentKey) end
+						if callback then connections:Invoke(callback, currentKey) end
 					end
 				end
 			end))
@@ -1623,6 +1698,7 @@ function Diq:CreateWindow(config)
 				frame:Destroy()
 			end
 			table.insert(Window._elements, obj)
+			RegisterElement(obj, connections)
 			return obj
 		end
 
@@ -1662,7 +1738,7 @@ function Diq:CreateWindow(config)
 	-- ==========================================
 	-- ปุ่มลัด Toggle UI (ค่าเริ่มต้น: K)
 	-- ==========================================
-	connections:Track(UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	connections:Track(ConnectInput("InputBegan", function(input, gameProcessed)
 		if gameProcessed or keyCaptureOwner or UserInputService:GetFocusedTextBox() then return end
 		if input.KeyCode == toggleKey then
 			isVisible = not isVisible
@@ -1698,7 +1774,9 @@ function Diq:CreateWindow(config)
 	function Window:Destroy()
 		if destroyed then return end
 		destroyed = true
+		notificationTasks:DisconnectAll()
 		connections:DisconnectAll()
+		table.clear(Window._elements)
 		if _activeTracker == connections then _activeTracker = nil end
 		if _activeScreenGui == ScreenGui then _activeScreenGui = nil end
 		if ScreenGui then ScreenGui:Destroy() end
@@ -1715,6 +1793,7 @@ end
 
 --- ทำลาย module ระดับบน (NotificationHolder, active tracker)
 function Diq:Destroy()
+	notificationTasks:DisconnectAll()
 	if _activeScreenGui then
 		_activeScreenGui:Destroy()
 		_activeScreenGui = nil

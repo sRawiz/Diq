@@ -1,343 +1,206 @@
 local ModuleOptions = ...
-local initialized = false
-local destroyed = false
-
--- ==========================================
--- ⚙️ Module: Movement System v3.0 (Refactored)
--- ==========================================
-
+local Runtime = type(ModuleOptions) == "table" and ModuleOptions.Runtime
 local Movement = {}
-
--- ==========================================
--- Services
--- ==========================================
-local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Input = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
+local initialized, destroyed = false, false
+local Config = { FlySpeed = 100, CFrameSpeed = 60 }
+local State = { IsFlying = false, IsCFrameSpeed = false, IsInfinityJump = false, IsNoClip = false, IsNoFling = false }
+local connections, originals = {}, {}
+local flyOwner, clipOwner, flingOwner = {}, {}, {}
+local attachment, velocity, flyRoot
+local listener
 
--- ==========================================
--- Constants
--- ==========================================
-local DEFAULT_FLY_SPEED = 100
-local DEFAULT_CFRAME_SPEED = 60
-local FLY_UP_KEY = Enum.KeyCode.Space
-local FLY_DOWN_KEY = Enum.KeyCode.LeftControl
-
--- ==========================================
--- Config
--- ==========================================
-local Config = {
-	FlySpeed = DEFAULT_FLY_SPEED,
-	CFrameSpeed = DEFAULT_CFRAME_SPEED,
-}
-
--- ==========================================
--- State
--- ==========================================
-local State = {
-	IsFlying = false,
-	IsCFrameSpeed = false,
-	IsInfinityJump = false,
-	IsNoClip = false,
-	IsNoFling = false, -- ✅ เพิ่มเข้า State table ตั้งแต่แรก
-}
-
-local Connections = {} -- เก็บ connections ทั้งหมดในที่เดียว
-
--- ==========================================
--- Helpers
--- ==========================================
-
---- ดึง CurrentCamera สดทุกครั้ง ป้องกัน camera เปลี่ยน
-local function GetCamera()
-	return workspace.CurrentCamera
+local function disconnect(key)
+	if connections[key] then connections[key]:Disconnect(); connections[key] = nil end
 end
-
-local function GetCharacterData()
-	local char = LocalPlayer.Character
-	if not char then return nil, nil end
-	return char:FindFirstChild("HumanoidRootPart"), char:FindFirstChildOfClass("Humanoid")
-end
-
---- ตัดการเชื่อมต่อ connection อย่างปลอดภัย
-local function SafeDisconnect(key)
-	local conn = Connections[key]
-	if conn and conn.Connected then
-		conn:Disconnect()
+local function changed()
+	if listener then
+		local ok = pcall(listener, Movement.GetState())
+		if not ok then warn("[Diq] Movement state listener failed") end
 	end
-	Connections[key] = nil
 end
-
---- เปิด/ปิด แรงต้านแรงโน้มถ่วง สำหรับ Fly
-local function ToggleAntiGravity(enable)
-	local rootPart = GetCharacterData()
-	if not rootPart then return end
-
-	if enable then
-		if not rootPart:FindFirstChild("FlyAttachment") then
-			local attachment = Instance.new("Attachment")
-			attachment.Name = "FlyAttachment"
-			attachment.Parent = rootPart
-
-			local lv = Instance.new("LinearVelocity")
-			lv.Name = "FlyVelocity"
-			lv.Attachment0 = attachment
-			lv.MaxForce = math.huge
-			lv.VectorVelocity = Vector3.zero
-			lv.Parent = rootPart
+local function claim(owner, object, property, value)
+	if Runtime then
+		assert(Runtime.Properties:Set(owner, object, property, value), "Movement property write failed")
+		return
+	end
+	-- Direct execution stays self-contained; Main supplies shared ownership.
+	originals[owner] = originals[owner] or {}
+	local objects = originals[owner]
+	objects[object] = objects[object] or {}
+	local fields = objects[object]
+	if not fields[property] then fields[property] = { value = object[property] } end
+	fields[property].last = value
+	if object[property] ~= value then object[property] = value end
+end
+local function release(owner, object)
+	if Runtime then Runtime.Properties:Release(owner, object); return end
+	for instance, fields in originals[owner] or {} do
+		if not object or instance == object then
+			for property, data in fields do
+				pcall(function() if instance[property] == data.last then instance[property] = data.value end end)
+			end
+			originals[owner][instance] = nil
 		end
-	else
-		local att = rootPart:FindFirstChild("FlyAttachment")
-		local lv = rootPart:FindFirstChild("FlyVelocity")
-		if att then att:Destroy() end
-		if lv then lv:Destroy() end
 	end
+	if not object then originals[owner] = nil end
 end
-
--- ==========================================
--- Core Logic — RenderStepped
--- ==========================================
-local function OnRenderStepped(deltaTime)
-	local rootPart, humanoid = GetCharacterData()
-	if not rootPart or not humanoid then return end
-
-	local camera = GetCamera()
-	if not camera then return end
-
+local function data()
+	if Runtime then
+		local record = Runtime.Registry:Get(LocalPlayer)
+		return record and record.Root, record and record.Humanoid
+	end
+	local character = LocalPlayer.Character
+	return character and character:FindFirstChild("HumanoidRootPart"), character and character:FindFirstChildOfClass("Humanoid")
+end
+local function clearFlight()
+	if velocity then velocity:Destroy(); velocity = nil end
+	if attachment then attachment:Destroy(); attachment = nil end
+	flyRoot = nil; release(flyOwner)
+end
+local function setupFlight(root, humanoid)
+	if flyRoot ~= root then
+		clearFlight()
+		attachment = Instance.new("Attachment")
+		attachment.Name = "DiqFlyAttachment"; attachment.Parent = root
+		velocity = Instance.new("LinearVelocity")
+		velocity.Name = "DiqFlyVelocity"; velocity.Attachment0 = attachment
+		velocity.MaxForce = math.huge; velocity.VectorVelocity = Vector3.zero; velocity.Parent = root
+		flyRoot = root
+	end
+	claim(flyOwner, humanoid, "PlatformStand", true)
+end
+local function connectStep(name, callback)
+	if Runtime then
+		return Runtime.Scheduler:Connect("Movement." .. name, "PreSimulation", 0, callback, function()
+			Movement.SetFly(false); Movement.SetSpeed(false); Movement.SetNoClip(false); Movement.SetNoFling(false)
+		end)
+	end
+	return RunService.PreSimulation:Connect(callback)
+end
+local function updateMovement(dt)
+	local root, humanoid = data()
+	local camera = workspace.CurrentCamera
+	if not root or not humanoid or not camera then clearFlight(); return end
+	if State.IsFlying then setupFlight(root, humanoid) end
+	if Input:GetFocusedTextBox() then return end
 	if State.IsFlying then
-		local moveVector = Vector3.zero
-
-		if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveVector += camera.CFrame.LookVector end
-		if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveVector -= camera.CFrame.LookVector end
-		if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveVector += camera.CFrame.RightVector end
-		if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveVector -= camera.CFrame.RightVector end
-		if UserInputService:IsKeyDown(FLY_UP_KEY) then moveVector += Vector3.yAxis end
-		if UserInputService:IsKeyDown(FLY_DOWN_KEY) then moveVector -= Vector3.yAxis end
-
-		if moveVector.Magnitude > 0 then moveVector = moveVector.Unit end
-
-		local rootPos = rootPart.Position
-		local cameraLook = camera.CFrame.LookVector
-		local lookAtPos = rootPos + Vector3.new(cameraLook.X, 0, cameraLook.Z)
-
-		rootPart.CFrame = CFrame.new(rootPos, lookAtPos) + (moveVector * Config.FlySpeed * deltaTime)
-
+		local direction = Vector3.zero
+		if Input:IsKeyDown(Enum.KeyCode.W) then direction += camera.CFrame.LookVector end
+		if Input:IsKeyDown(Enum.KeyCode.S) then direction -= camera.CFrame.LookVector end
+		if Input:IsKeyDown(Enum.KeyCode.D) then direction += camera.CFrame.RightVector end
+		if Input:IsKeyDown(Enum.KeyCode.A) then direction -= camera.CFrame.RightVector end
+		if Input:IsKeyDown(Enum.KeyCode.Space) then direction += Vector3.yAxis end
+		if Input:IsKeyDown(Enum.KeyCode.LeftControl) then direction -= Vector3.yAxis end
+		if direction.Magnitude > 0 then direction = direction.Unit end
+		local look = camera.CFrame.LookVector
+		local horizontal = Vector3.new(look.X, 0, look.Z)
+		local frame = root.CFrame
+		if horizontal.Magnitude > 0.001 then frame = CFrame.lookAt(root.Position, root.Position + horizontal) end
+		root.CFrame = frame + direction * Config.FlySpeed * math.min(dt, 0.1)
 	elseif State.IsCFrameSpeed then
-		local walkDir = humanoid.MoveDirection
-		if walkDir.Magnitude > 0 then
-			walkDir = Vector3.new(walkDir.X, 0, walkDir.Z).Unit
-			rootPart.CFrame = rootPart.CFrame + (walkDir * Config.CFrameSpeed * deltaTime)
+		local direction = Vector3.new(humanoid.MoveDirection.X, 0, humanoid.MoveDirection.Z)
+		if direction.Magnitude > 0 then root.CFrame += direction.Unit * Config.CFrameSpeed * math.min(dt, 0.1) end
+	end
+end
+local function updateBinding()
+	local needed = State.IsFlying or State.IsCFrameSpeed
+	if needed and not connections.Move then connections.Move = connectStep("Move", updateMovement)
+	elseif not needed then disconnect("Move") end
+end
+local function collisionStep(owner, others)
+	-- Reuse generation marks instead of allocating a new set every step.
+	local mark = {}
+	local list = Runtime and Runtime.Registry:GetPlayers() or Players:GetPlayers()
+	for _, player in list do
+		if (others and player ~= LocalPlayer) or (not others and player == LocalPlayer) then
+			local record = Runtime and Runtime.Registry:Get(player)
+			local character = player.Character
+			local parts = record and record.Parts
+			if not Runtime and character then
+				parts = {}; for _, part in character:GetDescendants() do if part:IsA("BasePart") then parts[part] = true end end
+			end
+			for part in parts or {} do
+				if part.Parent then owner[part] = mark; claim(owner, part, "CanCollide", false) end
+			end
 		end
 	end
+	for part, seen in owner do if seen ~= mark then release(owner, part); owner[part] = nil end end
 end
-
---- จัดการ RenderStepped connection — เปิดเมื่อจำเป็น ปิดเมื่อไม่ใช้
-local function UpdateRenderConnection()
-	local needsRender = State.IsFlying or State.IsCFrameSpeed
-
-	if needsRender and not Connections.Render then
-		Connections.Render = RunService.RenderStepped:Connect(OnRenderStepped)
-	elseif not needsRender then
-		SafeDisconnect("Render")
-	end
+local function resetCharacter()
+	Movement.SetFly(false); Movement.SetSpeed(false); Movement.SetNoClip(false)
+	Movement.SetNoFling(false); Movement.SetInfinityJump(false)
 end
-
--- ==========================================
--- Character Respawn Handler
--- ==========================================
-local function OnCharacterAdded()
-	-- รีเซ็ตทุก state เมื่อตัวละครเกิดใหม่
-	State.IsFlying = false
-	State.IsCFrameSpeed = false
-	State.IsNoClip = false
-	State.IsNoFling = false
-	State.IsInfinityJump = false -- ✅ เพิ่ม reset InfinityJump
-
-	UpdateRenderConnection()
-	SafeDisconnect("NoClip")
-	SafeDisconnect("NoFling")
-	SafeDisconnect("InfinityJump") -- ✅ เพิ่ม disconnect InfinityJump
+function Movement.SetFly(enabled)
+	if destroyed then return false end
+	State.IsFlying = enabled == true
+	if not State.IsFlying then clearFlight() end
+	updateBinding(); changed(); return true
 end
-
--- ==========================================
--- Initialize / Destroy
--- ==========================================
-local function Initialize()
-	Connections.CharacterAdded = LocalPlayer.CharacterAdded:Connect(OnCharacterAdded)
+function Movement.SetSpeed(enabled)
+	if destroyed then return false end
+	State.IsCFrameSpeed = enabled == true; updateBinding(); changed(); return true
 end
-
---- ทำลายทุกอย่าง ป้องกัน leak เมื่อ execute ซ้ำ
-function Movement.Destroy()
-	if destroyed then return end
-	destroyed = true
-	-- คืนค่า Fly state
-	if State.IsFlying then
-		local _, humanoid = GetCharacterData()
-		if humanoid then humanoid.PlatformStand = false end
-		ToggleAntiGravity(false)
-	end
-
-	-- Disconnect ทุก connection
-	for key in Connections do
-		SafeDisconnect(key)
-	end
-	table.clear(Connections)
-
-	-- Reset state
-	for key in State do
-		State[key] = false
-	end
+function Movement.SetNoClip(enabled)
+	if destroyed then return false end
+	State.IsNoClip = enabled == true
+	if State.IsNoClip and not connections.Clip then
+		connections.Clip = connectStep("NoClip", function() collisionStep(clipOwner, false) end)
+	elseif not State.IsNoClip then disconnect("Clip"); release(clipOwner); table.clear(clipOwner) end
+	changed(); return true
 end
-
--- ==========================================
--- Public API — Feature Controls
--- ==========================================
-
---- เปิด/ปิดโหมดบิน
-function Movement.SetFly(enable)
-	State.IsFlying = enable
-	local _, humanoid = GetCharacterData()
-	if humanoid then
-		humanoid.PlatformStand = enable
-		ToggleAntiGravity(enable)
-	end
-	UpdateRenderConnection()
+function Movement.SetNoFling(enabled)
+	if destroyed then return false end
+	State.IsNoFling = enabled == true
+	if State.IsNoFling and not connections.Fling then
+		connections.Fling = connectStep("NoFling", function() collisionStep(flingOwner, true) end)
+	elseif not State.IsNoFling then disconnect("Fling"); release(flingOwner); table.clear(flingOwner) end
+	changed(); return true
 end
-
---- สลับโหมดบิน
-function Movement.ToggleFly()
-	Movement.SetFly(not State.IsFlying)
-	return State.IsFlying
+function Movement.SetInfinityJump(enabled)
+	if destroyed then return false end
+	State.IsInfinityJump = enabled == true
+	if State.IsInfinityJump and not connections.Jump then
+		local function jump()
+			if destroyed or not State.IsInfinityJump or Input:GetFocusedTextBox() then return end
+			local _, humanoid = data()
+			if humanoid then humanoid:ChangeState(Enum.HumanoidStateType.Jumping) end
+		end
+		connections.Jump = Runtime and Runtime.Input:Connect("JumpRequest", jump) or Input.JumpRequest:Connect(jump)
+	elseif not State.IsInfinityJump then disconnect("Jump") end
+	changed(); return true
 end
-
---- เปิด/ปิดวิ่งเร็ว
-function Movement.SetSpeed(enable)
-	State.IsCFrameSpeed = enable
-	UpdateRenderConnection()
+function Movement.ToggleFly() Movement.SetFly(not State.IsFlying); return State.IsFlying end
+function Movement.ToggleSpeed() Movement.SetSpeed(not State.IsCFrameSpeed); return State.IsCFrameSpeed end
+function Movement.ToggleNoClip() Movement.SetNoClip(not State.IsNoClip); return State.IsNoClip end
+function Movement.ToggleNoFling() Movement.SetNoFling(not State.IsNoFling); return State.IsNoFling end
+local function finite(value)
+	assert(type(value) == "number" and value == value and value >= 0 and value < math.huge, "Expected finite nonnegative speed")
+	return value
 end
-
---- สลับวิ่งเร็ว
-function Movement.ToggleSpeed()
-	Movement.SetSpeed(not State.IsCFrameSpeed)
-	return State.IsCFrameSpeed
-end
-
---- เปิด/ปิดทะลุกำแพง
-function Movement.SetNoClip(enable)
-	State.IsNoClip = enable
-	if enable and not Connections.NoClip then
-		Connections.NoClip = RunService.Stepped:Connect(function()
-			if not State.IsNoClip then return end
-			local char = LocalPlayer.Character
-			if not char then return end
-			for _, part in char:GetDescendants() do
-				if part:IsA("BasePart") and part.CanCollide then
-					part.CanCollide = false
-				end
-			end
-		end)
-	elseif not enable then
-		SafeDisconnect("NoClip")
-	end
-end
-
---- สลับทะลุกำแพง
-function Movement.ToggleNoClip()
-	Movement.SetNoClip(not State.IsNoClip)
-	return State.IsNoClip
-end
-
---- เปิด/ปิด กระโดดไร้ขีดจำกัด
-function Movement.SetInfinityJump(enable)
-	State.IsInfinityJump = enable
-	if enable and not Connections.InfinityJump then
-		Connections.InfinityJump = UserInputService.JumpRequest:Connect(function()
-			if not State.IsInfinityJump then return end
-			local _, humanoid = GetCharacterData()
-			if humanoid then
-				humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-			end
-		end)
-	elseif not enable then
-		SafeDisconnect("InfinityJump")
-	end
-end
-
---- เปิด/ปิด ป้องกันโดนชนปลิว
-function Movement.SetNoFling(enable)
-	State.IsNoFling = enable
-	if enable and not Connections.NoFling then
-		Connections.NoFling = RunService.Stepped:Connect(function()
-			if not State.IsNoFling then return end
-			for _, player in Players:GetPlayers() do
-				if player ~= LocalPlayer and player.Character then
-					for _, part in player.Character:GetDescendants() do
-						if part:IsA("BasePart") then
-							part.CanCollide = false
-						end
-					end
-				end
-			end
-		end)
-	elseif not enable then
-		SafeDisconnect("NoFling")
-	end
-end
-
---- สลับ NoFling
-function Movement.ToggleNoFling()
-	Movement.SetNoFling(not State.IsNoFling)
-	return State.IsNoFling
-end
-
--- ==========================================
--- Public API — Speed Settings
--- ==========================================
-function Movement.SetFlySpeed(speed) Config.FlySpeed = speed end
-function Movement.SetCFrameSpeed(speed) Config.CFrameSpeed = speed end
-
--- ==========================================
--- Public API — Actions
--- ==========================================
-function Movement.ResetCharacter()
-	local _, humanoid = GetCharacterData()
-	if humanoid then humanoid.Health = 0 end
-end
-
-function Movement.Unanchor()
-	local rootPart = GetCharacterData()
-	if rootPart then rootPart.Anchored = false end
-end
-
--- ==========================================
--- Public API — Getters
--- ==========================================
+function Movement.SetFlySpeed(value) if not destroyed then Config.FlySpeed = finite(value) end end
+function Movement.SetCFrameSpeed(value) if not destroyed then Config.CFrameSpeed = finite(value) end end
+function Movement.ResetCharacter() if destroyed then return end; local _, humanoid = data(); if humanoid then humanoid.Health = 0 end end
+function Movement.Unanchor() if destroyed then return end; local root = data(); if root then root.Anchored = false end end
 function Movement.GetState()
-	return {
-		IsFlying = State.IsFlying,
-		IsCFrameSpeed = State.IsCFrameSpeed,
-		IsInfinityJump = State.IsInfinityJump,
-		IsNoClip = State.IsNoClip,
-		IsNoFling = State.IsNoFling, -- ✅ เพิ่มครบทุก state
-		FlySpeed = Config.FlySpeed,
-		CFrameSpeed = Config.CFrameSpeed,
-	}
+	local result = table.clone(State); result.FlySpeed = Config.FlySpeed; result.CFrameSpeed = Config.CFrameSpeed; return result
 end
-
--- ==========================================
--- Boot
--- ==========================================
+function Movement.SetStateListener(callback) listener = callback end
 function Movement.Init()
-	if destroyed then error("[Diq] Cannot initialize a destroyed module") end
+	assert(not destroyed, "Cannot initialize destroyed Movement")
 	if initialized then return end
 	initialized = true
-	Initialize()
+	connections.Character = LocalPlayer.CharacterAdded:Connect(resetCharacter)
+	connections.Removing = LocalPlayer.CharacterRemoving:Connect(resetCharacter)
+	connections.Focus = Runtime and Runtime.Input:Connect("WindowFocusReleased", resetCharacter) or Input.WindowFocusReleased:Connect(resetCharacter)
 end
-
--- Keep direct module execution compatible; Main explicitly defers initialization.
-if type(ModuleOptions) ~= "table" or not ModuleOptions.DeferInit then
-	Movement.Init()
+function Movement.Destroy()
+	if destroyed then return end
+	resetCharacter(); destroyed = true; listener = nil
+	for key in connections do disconnect(key) end
 end
-
+if type(ModuleOptions) ~= "table" or not ModuleOptions.DeferInit then Movement.Init() end
 return Movement

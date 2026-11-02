@@ -1,170 +1,102 @@
+local ModuleOptions = ...
+local Runtime = type(ModuleOptions) == "table" and ModuleOptions.Runtime
 local MiscSystem = {}
-
--- ==========================================
--- Services
--- ==========================================
-local TeleportService = game:GetService("TeleportService")
 local Players = game:GetService("Players")
 local Lighting = game:GetService("Lighting")
-local RunService = game:GetService("RunService")
+local TeleportService = game:GetService("TeleportService")
 local LocalPlayer = Players.LocalPlayer
-
--- ==========================================
--- Constants
--- ==========================================
-local FULLBRIGHT_AMBIENT = Color3.new(1, 1, 1)
-local FULLBRIGHT_BRIGHTNESS = 2
-local FULLBRIGHT_FOG_END = 9e9
-
--- ==========================================
--- State
--- ==========================================
-local Connections = {}
-local OriginalLighting = {}
-local State = {
-	IsFullbright = false,
-	IsAntiAFK = false,
+local destroyed = false
+local State = { IsFullbright = false, IsAntiAFK = false }
+local connections, original = {}, {}
+local owner = {}
+local pending
+local listener
+local desired = {
+	Ambient = Color3.new(1, 1, 1), ColorShift_Bottom = Color3.new(1, 1, 1),
+	ColorShift_Top = Color3.new(1, 1, 1), GlobalShadows = false, FogEnd = 9e9, Brightness = 2,
 }
-
--- ==========================================
--- Rejoin
--- ==========================================
-function MiscSystem.Rejoin()
-	local success, err = pcall(function()
-		if #Players:GetPlayers() <= 1 then
-			-- เซิร์ฟเวอร์มีคนเดียว อาจปิดตัวหลังออก ต้อง Teleport ใหม่
-			LocalPlayer:Kick("\nRejoining...\n(Please wait...)")
-			task.wait()
-			TeleportService:Teleport(game.PlaceId, LocalPlayer)
+local function changed()
+	if listener then
+		local ok = pcall(listener, MiscSystem.GetState())
+		if not ok then warn("[Diq] Misc state listener failed") end
+	end
+end
+local function disconnect(name)
+	if connections[name] then connections[name]:Disconnect(); connections[name] = nil end
+end
+local function applyLighting()
+	if destroyed or not State.IsFullbright then return end
+	for property, value in desired do
+		if Runtime then Runtime.Properties:Set(owner, Lighting, property, value)
+		elseif Lighting[property] ~= value then Lighting[property] = value end
+	end
+end
+function MiscSystem.SetFullbright(enabled)
+	if destroyed then return false end
+	enabled = enabled == true
+	if enabled == State.IsFullbright then return true end
+	State.IsFullbright = enabled
+	if enabled then
+		for property in desired do original[property] = Lighting[property] end
+		applyLighting()
+		connections.Lighting = Lighting.Changed:Connect(function(property)
+			if not State.IsFullbright or destroyed or desired[property] == nil or Lighting[property] == desired[property] or pending then return end
+			-- Coalesce external writes and keep lighting work off the render path.
+			pending = task.delay(0.1, function() pending = nil; applyLighting() end)
+		end)
+	else
+		disconnect("Lighting")
+		if pending then pcall(task.cancel, pending); pending = nil end
+		if Runtime then Runtime.Properties:Release(owner)
 		else
-			TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer)
+			for property, value in original do
+				if Lighting[property] == desired[property] then Lighting[property] = value end
+			end
+		end
+		table.clear(original)
+	end
+	changed(); return true
+end
+function MiscSystem.SetAntiAFK(enabled)
+	if destroyed then return false, "Module is closed" end
+	if not enabled then
+		State.IsAntiAFK = false; disconnect("Idle"); changed(); return true
+	end
+	if State.IsAntiAFK then return true end
+	local ok, virtualUser = pcall(function() return game:GetService("VirtualUser") end)
+	if not ok or not virtualUser then return false, "VirtualUser is unavailable in this runtime" end
+	-- Service existence does not prove permission to invoke its methods.
+	State.IsAntiAFK = true
+	connections.Idle = LocalPlayer.Idled:Connect(function()
+		if destroyed or not State.IsAntiAFK then return end
+		local succeeded = pcall(function()
+			virtualUser:CaptureController()
+			virtualUser:ClickButton2(Vector2.new())
+		end)
+		if not succeeded then
+			MiscSystem.SetAntiAFK(false)
+			warn("[Diq] Anti-AFK disabled: this runtime cannot invoke VirtualUser input")
 		end
 	end)
-
-	if not success then
-		warn("[Diq] Rejoin failed:", err)
-	end
+	changed(); return true
 end
-
--- ==========================================
--- Fullbright & No Fog
--- ==========================================
-function MiscSystem.SetFullbright(enable)
-	State.IsFullbright = enable
-
-	if enable then
-		if not Connections.Fullbright then
-			-- เก็บค่าแสงสว่างดั้งเดิม
-			OriginalLighting = {
-				Ambient = Lighting.Ambient,
-				ColorShift_Bottom = Lighting.ColorShift_Bottom,
-				ColorShift_Top = Lighting.ColorShift_Top,
-				GlobalShadows = Lighting.GlobalShadows,
-				FogEnd = Lighting.FogEnd,
-				Brightness = Lighting.Brightness,
-			}
-
-			-- บังคับเปลี่ยนค่าแสงทุกเฟรม (ป้องกันเกมเปลี่ยนกลับ)
-			Connections.Fullbright = RunService.RenderStepped:Connect(function()
-				Lighting.Ambient = FULLBRIGHT_AMBIENT
-				Lighting.ColorShift_Bottom = FULLBRIGHT_AMBIENT
-				Lighting.ColorShift_Top = FULLBRIGHT_AMBIENT
-				Lighting.GlobalShadows = false
-				Lighting.FogEnd = FULLBRIGHT_FOG_END
-				Lighting.Brightness = FULLBRIGHT_BRIGHTNESS
-			end)
-		end
-	else
-		if Connections.Fullbright then
-			Connections.Fullbright:Disconnect()
-			Connections.Fullbright = nil
-
-			-- คืนค่าแสงสว่างดั้งเดิม
-			if OriginalLighting.Ambient then
-				Lighting.Ambient = OriginalLighting.Ambient
-				Lighting.ColorShift_Bottom = OriginalLighting.ColorShift_Bottom
-				Lighting.ColorShift_Top = OriginalLighting.ColorShift_Top
-				Lighting.GlobalShadows = OriginalLighting.GlobalShadows
-				Lighting.FogEnd = OriginalLighting.FogEnd
-				Lighting.Brightness = OriginalLighting.Brightness
-			end
-			table.clear(OriginalLighting)
-		end
-	end
+function MiscSystem.Rejoin()
+	if destroyed then return false, "Module is closed" end
+	local ok = pcall(function()
+		if #Players:GetPlayers() <= 1 then TeleportService:Teleport(game.PlaceId, LocalPlayer)
+		else TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer) end
+	end)
+	if not ok then warn("[Diq] Rejoin failed") end
+	return ok
 end
-
--- ==========================================
--- Anti-AFK (ป้องกันโดนเตะเมื่ออยู่นิ่งๆ 20 นาที)
--- ==========================================
-function MiscSystem.SetAntiAFK(enable)
-	State.IsAntiAFK = enable
-
-	if enable then
-		if not Connections.AntiAFK then
-			-- ดึง VirtualUser แบบ pcall เผื่อ executor ไม่รองรับ
-			local VirtualUser = nil
-			pcall(function()
-				VirtualUser = game:GetService("VirtualUser")
-			end)
-
-			if not VirtualUser then
-				warn("[Diq] Anti-AFK: VirtualUser service not available on this executor")
-				State.IsAntiAFK = false
-				return
-			end
-
-			Connections.AntiAFK = LocalPlayer.Idled:Connect(function()
-				pcall(function()
-					VirtualUser:CaptureController()
-					VirtualUser:ClickButton2(Vector2.new())
-				end)
-			end)
-		end
-	else
-		if Connections.AntiAFK then
-			Connections.AntiAFK:Disconnect()
-			Connections.AntiAFK = nil
-		end
-	end
-end
-
--- ==========================================
--- Destroy / Cleanup
--- ==========================================
-function MiscSystem.Destroy()
-	-- คืนค่า Fullbright ก่อนปิด
-	if State.IsFullbright then
-		MiscSystem.SetFullbright(false)
-	end
-
-	-- ปิด Anti-AFK
-	if State.IsAntiAFK then
-		MiscSystem.SetAntiAFK(false)
-	end
-
-	-- Disconnect ที่เหลือ (ถ้ามี)
-	for key, connection in Connections do
-		if connection and connection.Connected then
-			connection:Disconnect()
-		end
-	end
-	table.clear(Connections)
-
-	State.IsFullbright = false
-	State.IsAntiAFK = false
-end
-
--- ==========================================
--- Public API — Getters
--- ==========================================
+function MiscSystem.SetStateListener(callback) listener = callback end
 function MiscSystem.IsFullbright() return State.IsFullbright end
 function MiscSystem.IsAntiAFK() return State.IsAntiAFK end
-
-function MiscSystem.GetState()
-	return {
-		IsFullbright = State.IsFullbright,
-		IsAntiAFK = State.IsAntiAFK,
-	}
+function MiscSystem.GetState() return table.clone(State) end
+function MiscSystem.Destroy()
+	if destroyed then return end
+	MiscSystem.SetFullbright(false); MiscSystem.SetAntiAFK(false)
+	destroyed = true; listener = nil
+	for name in connections do disconnect(name) end
 end
-
 return MiscSystem
