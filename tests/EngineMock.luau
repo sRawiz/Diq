@@ -186,7 +186,7 @@ local playerGui=Instance.new("PlayerGui"); playerGui.Parent=own
 local RunService={PreSimulation=signal(),RenderStepped=signal(),Heartbeat=signal(),bindings={}}
 function RunService:BindToRenderStep(name,priority,callback) self.bindings[name]=callback end
 function RunService:UnbindFromRenderStep(name) self.bindings[name]=nil end
-local Input={InputBegan=signal(),InputEnded=signal(),InputChanged=signal(),WindowFocused=signal(),WindowFocusReleased=signal(),JumpRequest=signal(),MouseBehavior=Enum.MouseBehavior.Default}
+local Input={InputBegan=signal(),InputEnded=signal(),InputChanged=signal(),WindowFocused=signal(),WindowFocusReleased=signal(),TextBoxFocused=signal(),JumpRequest=signal(),MouseBehavior=Enum.MouseBehavior.Default}
 function Input:GetFocusedTextBox() return self.textbox end
 function Input:IsKeyDown() return false end
 function Input:GetMouseLocation() return vec(400,300) end
@@ -202,12 +202,12 @@ function TweenService:Create(object,info,props)
 end
 local TweenInfo={new=function(...) return {...} end}
 local RaycastParams={new=function() return {} end}
-local GuiService={MenuIsOpen=false,GetGuiInset=function() return vec(0,0) end}
+local GuiService={MenuIsOpen=false,MenuOpened=signal(),GetGuiInset=function() return vec(0,0) end}
 local TeleportService={Teleport=function() end,TeleportToPlaceInstance=function() end}
 local VirtualUser={CaptureController=function() end,ClickButton2=function() end}
 local services={Players=Players,RunService=RunService,UserInputService=Input,Lighting=Lighting,CoreGui=CoreGui,
  TweenService=TweenService,GuiService=GuiService,TeleportService=TeleportService,VirtualUser=VirtualUser,
- MarketplaceService={GetProductInfo=function() return {Name="Test"} end}}
+ MarketplaceService={GetProductInfo=function() return {Name="Test"} end}, HttpService={}}
 local game={PlaceId=1,JobId="test"}
 function game:GetService(name) return assert(services[name],name) end
 local drawings={}

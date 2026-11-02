@@ -1,5 +1,7 @@
 # Diq infrastructure
 
+ส่วน Profiles / Keybinds / Performance / Diagnostics / Quick Actions ดู [Control Center](control-center.md)
+
 อ้างอิง Roblox Docs โดยตรง ตรวจเมื่อ 2 พฤศจิกายน 2026 ไม่มี community skill เป็น dependency
 เอกสารอธิบาย runtime นี้ ไม่ได้เปลี่ยนโปรเจกต์เป็น Studio ModuleScripts
 

@@ -8,6 +8,9 @@
     "ESPSystem",
     "AimbotSystem",
     "HitboxSystem",
-    "MiscSystem"
+    "MiscSystem",
+    "Preferences",
+    "Keybinds",
+    "ControlCenter"
   ]
 }

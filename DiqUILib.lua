@@ -748,7 +748,7 @@ function Diq:CreateWindow(config)
 		-- ======================================
 		-- 📝 CreateLabel — หัวข้อหมวดหมู่
 		-- ======================================
-		function Tab:CreateLabel(text)
+		function Tab:CreateLabel(text, options)
 			local connections = CreateConnectionTracker((self and self._tracker) or connections)
 			local obj = {}
 			local targetParent = (self and self._content) or content
@@ -768,6 +768,13 @@ function Diq:CreateWindow(config)
 			lbl.TextSize = 12 -- ขยาย Font ให้เด่นขึ้นนิดหน่อย
 			lbl.TextXAlignment = Enum.TextXAlignment.Left
 			lbl.Parent = frame
+			if options and options.Wrap then
+				frame.Size = UDim2.new(1, 0, 0, 0)
+				frame.AutomaticSize = Enum.AutomaticSize.Y
+				lbl.Size = UDim2.new(1, -10, 0, 24)
+				lbl.AutomaticSize = Enum.AutomaticSize.Y
+				lbl.TextWrapped = true
+			end
 
 			-- เส้นแบ่งใต้หัวข้อ
 			local sep = Instance.new("Frame")
@@ -1206,15 +1213,17 @@ function Diq:CreateWindow(config)
 				hitArea.ZIndex = 3
 				hitArea.Parent = sliderArea
 
-				local function UpdateSlider(newValue)
+				local function UpdateSlider(newValue, silent)
 					local previous = sValue
 					sValue = math.clamp(math.floor(newValue), sMin, sMax)
 					local ratio = (sValue - sMin) / math.max(sMax - sMin, 1)
 					fill.Size = UDim2.new(ratio, 0, 1, 0)
 					sKnob.Position = UDim2.new(ratio, -5, 0.5, -5)
 					valInput.Text = tostring(sValue)
-					if sCb and previous ~= sValue then connections:Invoke(sCb, sValue) end
+					if sCb and previous ~= sValue and not silent then connections:Invoke(sCb, sValue) end
 				end
+				function obj:GetSlider() return sValue end
+				function obj:SetSlider(value, silent) if connections.Alive then UpdateSlider(value, silent) end end
 
 				connections:Track(valInput.FocusLost:Connect(function()
 					local parsed = tonumber(valInput.Text)
@@ -1323,14 +1332,14 @@ function Diq:CreateWindow(config)
 			hitArea.ZIndex = 3
 			hitArea.Parent = frame
 
-			local function UpdateSlider(newValue)
+			local function UpdateSlider(newValue, silent)
 				local previous = value
 				value = math.clamp(math.floor(newValue), min, max)
 				local ratio = (value - min) / math.max(max - min, 1)
 				fill.Size = UDim2.new(ratio, 0, 1, 0)
 				sliderKnob.Position = UDim2.new(ratio, -6, 0.5, -6)
 				valInput.Text = tostring(value)
-				if callback and previous ~= value then connections:Invoke(callback, value) end
+				if callback and previous ~= value and not silent then connections:Invoke(callback, value) end
 			end
 
 			connections:Track(valInput.FocusLost:Connect(function()
@@ -1348,7 +1357,7 @@ function Diq:CreateWindow(config)
 				UpdateSlider(min + (max - min) * ratio)
 			end)
 
-			function obj:Set(v) UpdateSlider(v) end
+			function obj:Set(v, silent) UpdateSlider(v, silent) end
 			function obj:Get() return value end
 			function obj:Reset() obj:Set(default or min) end
 			function obj:SetText(t) lbl.Text = t end
@@ -1517,7 +1526,7 @@ function Diq:CreateWindow(config)
 				end
 			end))
 
-			function obj:Set(opt)
+			function obj:Set(opt, silent)
 				selected = opt; selText.Text = opt
 				for _, b in optionBtns do
 					local match = (b.Text == opt)
@@ -1526,7 +1535,7 @@ function Diq:CreateWindow(config)
 						BackgroundTransparency = match and 0 or 0.5,
 					})
 				end
-				if callback then connections:Invoke(callback, selected) end
+				if callback and not silent then connections:Invoke(callback, selected) end
 			end
 			function obj:Get() return selected end
 			function obj:Reset() obj:Set(default or (options and options[1]) or "") end
@@ -1542,8 +1551,9 @@ function Diq:CreateWindow(config)
 		-- ======================================
 		-- ✏️ CreateInput — ช่องพิมพ์ข้อความ
 		-- ======================================
-		function Tab:CreateInput(text, placeholder, callback)
+		function Tab:CreateInput(text, placeholder, callback, options)
 			local connections = CreateConnectionTracker((self and self._tracker) or connections)
+			options = options or {}
 			local obj = {}
 			local targetParent = (self and self._content) or content
 
@@ -1577,6 +1587,28 @@ function Diq:CreateWindow(config)
 			inputBox.TextSize = 12
 			inputBox.ClearTextOnFocus = false
 			inputBox.Parent = frame
+			if options.Multiline then
+				frame.Size = UDim2.new(1, 0, 0, 160)
+				lbl.Size = UDim2.new(1, -24, 0, 24)
+				local scroll = Instance.new("ScrollingFrame")
+				scroll.Position = UDim2.new(0, 12, 0, 28)
+				scroll.Size = UDim2.new(1, -24, 1, -40)
+				scroll.BackgroundTransparency = 1
+				scroll.BorderSizePixel = 0
+				scroll.ScrollBarThickness = 4
+				scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+				scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+				scroll.ScrollingDirection = Enum.ScrollingDirection.Y
+				scroll.Parent = frame
+				inputBox.Parent = scroll
+				inputBox.Position = UDim2.new(0, 0, 0, 0)
+				inputBox.Size = UDim2.new(1, -6, 0, 116)
+				inputBox.AutomaticSize = Enum.AutomaticSize.Y
+				inputBox.MultiLine = true
+				inputBox.TextXAlignment = Enum.TextXAlignment.Left
+				inputBox.TextYAlignment = Enum.TextYAlignment.Top
+				inputBox.TextWrapped = true
+			end
 			ApplyCorner(inputBox, 6)
 			ApplyPadding(inputBox, 0, 0, 8, 8)
 
@@ -1682,10 +1714,10 @@ function Diq:CreateWindow(config)
 				end
 			end))
 
-			function obj:Set(key)
+			function obj:Set(key, silent)
 				currentKey = key
 				keyBtn.Text = key.Name
-				if options.OnChanged then options.OnChanged(key) end
+				if options.OnChanged and not silent then options.OnChanged(key) end
 			end
 			function obj:Reset() obj:Set(default or Enum.KeyCode.Unknown) end
 			function obj:Get() return currentKey end
@@ -1739,7 +1771,7 @@ function Diq:CreateWindow(config)
 	-- ปุ่มลัด Toggle UI (ค่าเริ่มต้น: K)
 	-- ==========================================
 	connections:Track(ConnectInput("InputBegan", function(input, gameProcessed)
-		if gameProcessed or keyCaptureOwner or UserInputService:GetFocusedTextBox() then return end
+		if config.ManagedInput or gameProcessed or keyCaptureOwner or UserInputService:GetFocusedTextBox() then return end
 		if input.KeyCode == toggleKey then
 			isVisible = not isVisible
 			MainFrame.Visible = isVisible
@@ -1756,6 +1788,11 @@ function Diq:CreateWindow(config)
 	end
 
 	function Window:GetToggleKey() return toggleKey end
+	function Window:IsCapturingKeybind() return keyCaptureOwner ~= nil end
+	function Window:SelectTab(tab)
+		if destroyed or not table.find(tabs, tab) then return false end
+		SwitchTab(tab); self:SetVisible(true); return true
+	end
 
 	function Window:Toggle()
 		isVisible = not isVisible

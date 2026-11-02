@@ -21,7 +21,7 @@ with tempfile.TemporaryDirectory(prefix='.diq-build-', dir=root / 'tests') as te
     subprocess.run([sys.executable, str(root / 'tools/build.py'), '--output', str(bundle)], check=True)
     subprocess.run([str(args.luau_dir / 'luau-compile.exe'), '--null', str(bundle)], check=True)
     factories += '\nfactories.Bundle = function(...)\n' + bundle.read_text(encoding='utf-8') + '\nend\n'
-for suite in ['Infrastructure', 'UI', 'Loader']:
+for suite in ['Infrastructure', 'UI', 'Loader', 'ControlCenter']:
     spec = root / f'tests/{suite}.spec.luau'
     if not spec.exists():
         continue

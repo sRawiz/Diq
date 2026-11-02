@@ -101,11 +101,14 @@ local function Start()
 	App.Actions = App.Runtime.Scope:Add(App.Runtime:CreateScope(), "Actions")
 	local DiqUI = LoadModule("DiqUILib", { "CreateWindow", "Destroy", "LoadIcons", "Notify" })
 	local DiqIcons = LoadModule("DiqIcons", {  }, true)
-	local Movement = LoadModule("MovementSystem", { "Destroy", "Init", "ResetCharacter", "SetCFrameSpeed", "SetFly", "SetFlySpeed", "SetInfinityJump", "SetNoClip", "SetNoFling", "SetSpeed", "Unanchor" })
-	local ESP = LoadModule("ESPSystem", { "Destroy", "Init", "SetBoxes", "SetEnabled", "SetHealth", "SetHighlights", "SetNames", "SetTracers", "SetUseTeamColor", "SetColorMode", "SetRelationVisible", "SetRelationColor", "SetShowRelation", "SetTeamAttribute", "SetMaxDistance" })
-	local Aimbot = LoadModule("AimbotSystem", { "Destroy", "Init", "ApplyAssistPreset", "SetEnabledListener", "SetEnabled", "SetAimPart", "SetFOVRadius", "SetShowFOV" })
-	local Hitbox = LoadModule("HitboxSystem", { "Destroy", "Init", "SetEnabled", "SetSize", "SetTargetPart", "SetTeamCheck", "SetTransparency" })
-	local Misc = LoadModule("MiscSystem", { "Destroy", "Rejoin", "SetAntiAFK", "SetFullbright" })
+	local Movement = LoadModule("MovementSystem", { "Destroy", "Init", "ResetCharacter", "SetCFrameSpeed", "SetFly", "SetFlySpeed", "SetInfinityJump", "SetNoClip", "SetNoFling", "SetSpeed", "Unanchor", "GetState", "SetStateListener" })
+	local ESP = LoadModule("ESPSystem", { "Destroy", "Init", "SetBoxes", "SetEnabled", "SetHealth", "SetHighlights", "SetNames", "SetTracers", "SetUseTeamColor", "SetColorMode", "SetRelationVisible", "SetRelationColor", "SetShowRelation", "SetTeamAttribute", "SetMaxDistance", "SetPerformance", "IsEnabled" })
+	local Aimbot = LoadModule("AimbotSystem", { "Destroy", "Init", "ApplyAssistPreset", "SetEnabledListener", "SetEnabled", "SetAimPart", "SetFOVRadius", "SetShowFOV", "SetManagedInput", "SetScanInterval", "SetInputSuspended", "IsEnabled" })
+	local Hitbox = LoadModule("HitboxSystem", { "Destroy", "Init", "SetEnabled", "SetSize", "SetTargetPart", "SetTeamCheck", "SetTransparency", "IsEnabled" })
+	local Misc = LoadModule("MiscSystem", { "Destroy", "Rejoin", "SetAntiAFK", "SetFullbright", "IsAntiAFK", "IsFullbright", "SetStateListener" })
+	local Preferences = LoadModule("Preferences", { "new" })
+	local Keybinds = LoadModule("Keybinds", { "new" })
+	local ControlCenter = LoadModule("ControlCenter", { "new" })
 
 	for _, entry in App.Modules do
 		if App.Destroyed then error("[Diq] Startup cancelled", 0) end
@@ -120,12 +123,19 @@ local function Start()
 		OnClose = cleanup,
 		Title = "Diq",
 		ToggleKey = Enum.KeyCode.K,
+		ManagedInput = true,
 	})
+	local Controls = ControlCenter.new({ App = App, Window = MyWindow, UI = DiqUI, Runtime = App.Runtime,
+		Preferences = Preferences, Keybinds = Keybinds,
+		Modules = { Movement = Movement, ESP = ESP, Aim = Aimbot, Hitbox = Hitbox, Misc = Misc },
+	})
+	App.Tools = Controls
+	table.insert(App.Modules, { Name = "ControlCenter", Module = Controls })
 
 	-- ==========================================
 	-- 🏃 Tab: Movement (ใช้ Lucide icon "move")
 	-- ==========================================
-	local movementTab = MyWindow:CreateTab("Movement", "move")
+	local movementTab = Controls:TrackTab(MyWindow:CreateTab("Movement", "move"), "movement")
 
 	movementTab:CreateLabel("MOVEMENT SETTINGS")
 
@@ -232,11 +242,11 @@ local function Start()
 	-- ==========================================
 	-- 🎯 Tab: Combat (ใช้ Lucide icon "crosshair")
 	-- ==========================================
-	local aimTab = MyWindow:CreateTab("Aim Assist", "crosshair")
+	local aimTab = Controls:TrackTab(MyWindow:CreateTab("Aim Assist", "crosshair"), "aim")
 
 	aimTab:CreateLabel("AIM ASSIST")
 	Aimbot.ApplyAssistPreset()
-	local aimAssistToggle = aimTab:CreateToggle("Aim Assist [Q]", false, function(enabled)
+	local aimAssistToggle = aimTab:CreateToggle("Aim Assist", false, function(enabled)
 		Aimbot.SetEnabled(enabled)
 	end, { Icon = "crosshair" })
 	Aimbot.SetEnabledListener(function(enabled)
@@ -251,9 +261,9 @@ local function Start()
 	aimTab:CreateToggle("Show FOV", true, function(visible)
 		Aimbot.SetShowFOV(visible)
 	end, { Icon = "circle" })
-	aimTab:CreateLabel("Q: on/off | Visible opponents only")
+	aimTab:CreateLabel("Shortcuts and Hold / Toggle modes are in Keybinds")
 
-	local combatTab = MyWindow:CreateTab("Combat", "shield")
+	local combatTab = Controls:TrackTab(MyWindow:CreateTab("Combat", "shield"), "combat")
 	combatTab:CreateLabel("HITBOX EXPANDER")
 
 	combatTab:CreateToggle("Enable Hitbox Expander", false, function(state)
@@ -287,7 +297,7 @@ local function Start()
 	-- ==========================================
 	-- 👁️ Tab: Visuals (ใช้ Lucide icon "eye")
 	-- ==========================================
-	local visualTab = MyWindow:CreateTab("Visuals", "eye")
+	local visualTab = Controls:TrackTab(MyWindow:CreateTab("Visuals", "eye"), "visual")
 
 	visualTab:CreateLabel("ESP MASTER")
 
@@ -366,7 +376,7 @@ local function Start()
 	-- ==========================================
 	-- ⚙️ Tab: Settings (ใช้ Lucide icon "settings")
 	-- ==========================================
-	local settingsTab = MyWindow:CreateTab("Settings", "settings")
+	local settingsTab = Controls:TrackTab(MyWindow:CreateTab("Settings", "settings"), "settings")
 
 	settingsTab:CreateLabel("PROFILE")
 
@@ -384,12 +394,7 @@ local function Start()
 		game:GetService("Players").LocalPlayer.UserId
 	)
 
-	settingsTab:CreateLabel("WINDOW SHORTCUT")
-	settingsTab:CreateKeybind("Show / Hide Window", MyWindow:GetToggleKey(), nil, {
-		OnChanged = function(key)
-			MyWindow:SetToggleKey(key)
-		end,
-	})
+	settingsTab:CreateLabel("Manage all shortcuts in Keybinds. End stops all features.")
 
 	settingsTab:CreateLabel("UTILITY")
 
@@ -415,8 +420,8 @@ local function Start()
 	settingsTab:CreateLabel("DANGER ZONE")
 
 	settingsTab:CreateButton("Reset All Settings", function()
-		MyWindow:ResetAll()
-		DiqUI:Notify("Reset Complete", "All settings restored to defaults", 3, "success")
+		local reset, reason = Controls:Reset()
+		DiqUI:Notify(reset and "Reset Complete" or "Reset failed", reset and "All settings restored to defaults" or reason, 3, reset and "success" or "warning")
 	end, { Icon = "rotate-ccw" })
 
 	settingsTab:CreateLabel("ABOUT")
@@ -428,7 +433,8 @@ local function Start()
 	-- ==========================================
 	-- ✅ แจ้งเตือนว่าโหลดสำเร็จ
 	-- ==========================================
-	DiqUI:Notify("Loaded Successfully!", "Diq Panel v3.0 is ready\nPress K to toggle UI", 4, "success")
+	Controls:Mount()
+	DiqUI:Notify("Loaded Successfully!", "Diq is ready\nK: panel | F1: quick actions | End: stop all", 4, "success")
 	print("[Diq] Panel v3.0 Loaded Successfully!")
 
 end

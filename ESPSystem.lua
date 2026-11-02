@@ -41,6 +41,7 @@ local Config = {
 	ShowRelation = true,
 	TeamAttribute = "", -- Optional Player attribute; never guess game-specific team fields.
 	MaxDistance = 0, -- Studs; 0 means unlimited.
+	UpdateInterval = 0, MaxVisuals = 0, PerformanceDistance = 0,
 	TeammateColor = Color3.fromRGB(80, 200, 255),
 	EnemyColor = Color3.fromRGB(255, 70, 90),
 	UnknownColor = Color3.fromRGB(255, 200, 80),
@@ -288,11 +289,13 @@ end
 -- ==========================================
 -- Main Update Loop
 -- ==========================================
+local budgetOrder = {}
 local function UpdateESP()
 	if destroyed or not Config.Enabled then return end
 	local camera = GetCamera()
 	if not camera then HideAllESP(); return end
 
+	table.clear(budgetOrder)
 	for player, cache in ESP_Cache do
 		local character = player.Character
 		local record = Runtime and Runtime.Registry:Get(player)
@@ -312,10 +315,25 @@ local function UpdateESP()
 			or (relation == "Enemy" and Config.ShowEnemies)
 			or (relation == "Unknown" and Config.ShowUnknown)
 		local distance = (camera.CFrame.Position - rootPart.Position).Magnitude
-		if not allowed or (Config.MaxDistance > 0 and distance > Config.MaxDistance) then
+		if not allowed or (Config.MaxDistance > 0 and distance > Config.MaxDistance)
+			or (Config.PerformanceDistance > 0 and distance > Config.PerformanceDistance) then
 			HideESP(cache)
 			continue
 		end
+		cache.BudgetPlayer, cache.BudgetDistance, cache.BudgetRelation = player, distance, relation
+		cache.BudgetRoot, cache.BudgetHumanoid, cache.BudgetCharacter = rootPart, humanoid, character
+		table.insert(budgetOrder, cache)
+	end
+	if Config.MaxVisuals > 0 and #budgetOrder > Config.MaxVisuals then
+		table.sort(budgetOrder, function(a, b)
+			if a.BudgetDistance == b.BudgetDistance then return a.BudgetPlayer.UserId < b.BudgetPlayer.UserId end
+			return a.BudgetDistance < b.BudgetDistance
+		end)
+	end
+	for index, cache in budgetOrder do
+		if Config.MaxVisuals > 0 and index > Config.MaxVisuals then HideESP(cache); continue end
+		local player, distance, relation = cache.BudgetPlayer, cache.BudgetDistance, cache.BudgetRelation
+		local rootPart, humanoid, character = cache.BudgetRoot, cache.BudgetHumanoid, cache.BudgetCharacter
 		local color = GetColor(player, relation)
 
 		EnsureVisuals(player, cache)
@@ -363,6 +381,10 @@ local function UpdateESP()
 		UpdateTracer(cache, screenData, color, camera.ViewportSize)
 		UpdateHealthBar(cache, screenData, humanoid)
 	end
+	for _, cache in budgetOrder do
+		cache.BudgetPlayer, cache.BudgetRoot, cache.BudgetHumanoid, cache.BudgetCharacter = nil, nil, nil, nil
+	end
+	table.clear(budgetOrder)
 end
 
 -- ==========================================
@@ -370,9 +392,23 @@ end
 -- ==========================================
 local function ConnectRender()
 	if Runtime then
-		return Runtime.Scheduler:Connect("ESP.Render", "RenderStepped", 0, UpdateESP, function() ESPSystem.SetEnabled(false) end)
+		return Runtime.Scheduler:Connect("ESP.Render", "RenderStepped", Config.UpdateInterval, UpdateESP, function() ESPSystem.SetEnabled(false) end)
 	end
-	return RunService.RenderStepped:Connect(UpdateESP)
+	local elapsed = 0
+	return RunService.RenderStepped:Connect(function(dt)
+		elapsed += dt
+		if elapsed < Config.UpdateInterval then return end
+		elapsed = Config.UpdateInterval > 0 and elapsed % Config.UpdateInterval or 0
+		UpdateESP()
+	end)
+end
+function ESPSystem.SetPerformance(interval, count, distance)
+	assert(type(interval) == "number" and interval >= 0 and interval <= 0.25, "Invalid ESP interval")
+	assert(type(count) == "number" and count >= 0 and count <= 500 and count % 1 == 0, "Invalid visual limit")
+	assert(type(distance) == "number" and distance >= 0 and distance <= 10000, "Invalid performance distance")
+	Config.UpdateInterval, Config.MaxVisuals, Config.PerformanceDistance = interval, count, distance
+	if Connections.RenderStepped then Connections.RenderStepped:Disconnect(); Connections.RenderStepped = ConnectRender() end
+	UpdateESP()
 end
 local function Initialize()
 	ESPFolder = CreateESPFolder()
@@ -391,6 +427,7 @@ end
 
 --- ทำลายทุกอย่าง ป้องกัน leak เมื่อ execute ซ้ำ
 function ESPSystem.Destroy()
+	table.clear(budgetOrder)
 	if destroyed then return end
 	destroyed = true
 	Config.Enabled = false

@@ -1,5 +1,15 @@
 # Diq verification
 
+## Control Center
+
+คู่มือฟีเจอร์ใหม่อยู่ใน [control-center.md](../docs/control-center.md)
+`run_infrastructure.py` รวม ControlCenter suite: ทดสอบ production UI buttons,
+profile validation/rollback, per-place storage, shortcut conflicts/capture/Hold,
+performance budgets, Quick Actions และ frame sample cleanup
+JSON codec, filesystem และ clipboard เป็น mock; ยังต้องทดสอบสิทธิ์และ UI layout บน executor จริง
+เมื่อใช้ Main รุ่นนี้ Q และปุ่มอื่นถูกจัดการผ่านแท็บ Keybinds และ dispatcher กลาง
+ชื่อ Aim Assist ใน UI ไม่มีตัวอักษร [Q] ตายตัวแล้ว เพราะผู้ใช้เปลี่ยนปุ่มได้
+
 ## Infrastructure รุ่นใหม่
 
 ดูสัญญา runtime, build และ lifecycle ใน [architecture.md](../docs/architecture.md)

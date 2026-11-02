@@ -74,7 +74,7 @@ local function check(condition,message) checks+=1; assert(condition,message) end
 local function highlight(name)
  for _,o in instances do if o.Name==name..'_ESP' and not o.Destroyed then return o end end
 end
-local function tick() RunService.RenderStepped:Fire() end
+local function tick() RunService.RenderStepped:Fire(1/60) end
 esp.Init(); esp.Init()
 check(Players.PlayerAdded:Count()==1,'Init must be idempotent')
 check(RunService.RenderStepped:Count()==0,'Disabled ESP must not render')

@@ -25,11 +25,12 @@ local currentPlayer, currentPart
 local nextRequested = false
 local cycleOrder = nil
 local inputSuspended = false
+local managedInput = false
 local lastAimDirection, lastCamera
 local challenger, challengerTime = nil, 0
 local scanElapsed = 0
 local SCAN_INTERVAL = 0.1
-local metrics = { Scans = 0, Evaluations = 0, Raycasts = 0 }
+local metrics = { Scans = 0, Evaluations = 0, Raycasts = 0, Calls = 0, Total = 0, Max = 0, Failures = 0 }
 local status = "Disabled"
 local rejected = {}
 local connections = {}
@@ -340,8 +341,12 @@ local function updateBinding()
 	local needed = initialized and not destroyed and Config.Enabled
 	if needed and not bound then
 		RunService:BindToRenderStep(bindingName, Enum.RenderPriority.Last.Value + 1, function(dt)
+			local started = os.clock()
 			local ok, err = pcall(step, dt)
+			local duration = os.clock() - started
+			metrics.Calls += 1; metrics.Total += duration; metrics.Max = math.max(metrics.Max, duration)
 			if not ok then
+				metrics.Failures += 1
 				AimbotSystem.SetEnabled(false)
 				status = "Runtime error: " .. tostring(err)
 				releaseTarget()
@@ -365,7 +370,7 @@ function AimbotSystem.Init()
 	local ok, err = pcall(function()
 		createOverlay()
 		table.insert(connections, connectInput("InputBegan", function(input, processed)
-			if inputSuspended or processed or not focused or GuiService.MenuIsOpen or Input:GetFocusedTextBox() ~= nil then return end
+			if managedInput or inputSuspended or processed or not focused or GuiService.MenuIsOpen or Input:GetFocusedTextBox() ~= nil then return end
 			if simpleControls then
 				if matchesActivation(input) then AimbotSystem.SetEnabled(not Config.Enabled) end
 				return
@@ -381,6 +386,7 @@ function AimbotSystem.Init()
 			releaseTarget()
 		end))
 		table.insert(connections, connectInput("InputEnded", function(input)
+			if managedInput then return end
 			if Config.ActivationMode == "Hold" and matchesActivation(input) then held = false; releaseTarget() end
 		end))
 		table.insert(connections, connectInput("WindowFocusReleased", function()
@@ -458,8 +464,15 @@ function AimbotSystem.SetInputSuspended(value)
 		held = false
 		status = "Paused: editing keybind"
 		releaseTarget()
+	elseif simpleControls then
+		held = Config.Enabled
 	end
 end
+function AimbotSystem.SetManagedInput(value) managedInput = value == true end
+function AimbotSystem.SetScanInterval(value)
+	SCAN_INTERVAL = finite(value, "Scan interval", 0.1, 0.5)
+end
+function AimbotSystem.GetScanInterval() return SCAN_INTERVAL end
 function AimbotSystem.NextTarget()
 	if inputSuspended or destroyed or not Config.Enabled or not held or not focused or GuiService.MenuIsOpen or Input:GetFocusedTextBox() ~= nil then return false end
 	nextRequested = true
