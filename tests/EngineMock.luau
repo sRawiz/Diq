@@ -50,6 +50,15 @@ local function advance(seconds)
 		end
 	end
 end
+local function runYielding(callback, ...)
+	local args, result = table.pack(...), nil
+	task.spawn(function() result = table.pack(callback(table.unpack(args, 1, args.n))) end)
+	for _ = 1, 200 do
+		advance(0)
+		if result then return table.unpack(result, 1, result.n) end
+	end
+	error("Mock operation did not complete")
+end
 local function liveConnections()
 	local count = 0; for _, s in signals do count += s:Count() end; return count
 end
@@ -101,7 +110,7 @@ local methods, instanceMT = {}, {}
 local instances = {}
 local signalNames = {Changed=true,Destroying=true,ChildAdded=true,ChildRemoved=true,DescendantAdded=true,DescendantRemoving=true,
  CharacterAdded=true,CharacterRemoving=true,Idled=true,InputBegan=true,InputEnded=true,InputChanged=true,MouseEnter=true,MouseLeave=true,
- MouseButton1Click=true,Focused=true,FocusLost=true}
+ MouseButton1Click=true,Activated=true,Focused=true,FocusLost=true}
 function methods:GetChildren() return table.clone(self.children) end
 function methods:GetDescendants()
 	self.calls.descendants = (self.calls.descendants or 0)+1

@@ -17,6 +17,8 @@ function services.HttpService:JSONEncode(value)
 end
 function services.HttpService:JSONDecode(text) return copy(assert(encoded[text], "bad JSON")) end
 -- INSERT_MODULES
+local rawMain = factories.Main
+factories.Main = function(...) return runYielding(rawMain, ...) end
 local baseline = liveConnections()
 local captured, injected = {}, {}
 for name, factory in factories do

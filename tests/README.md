@@ -1,5 +1,21 @@
 # Diq verification
 
+## Loading screen
+
+`Main.lua` แสดงหน้า Loading ก่อนดาวน์โหลดโมดูล โดยใช้ GUI ที่สร้างในไฟล์เอง
+แถบเปอร์เซ็นต์แสดงขั้นตอนโหลด/ตั้งค่า ไม่ใช่เปอร์เซ็นต์จำนวนไบต์หรือเวลาที่เหลือ
+เมื่อสำเร็จหน้าจอจะปิดเอง หากล้มเหลวจะ rollback โมดูลและแสดงข้อความพร้อมปุ่ม Close
+Cancel หยุดการเริ่มงานต่อและเก็บกวาด GUI แต่ไม่สามารถยกเลิก HTTP request ที่ executor ส่งไปแล้วได้
+ผลตอบกลับที่มาภายหลังจะไม่เริ่มโมดูลหรือรบกวน session ใหม่
+
+Loading เริ่มแสดงเมื่อ `Main.lua` เริ่มทำงานแล้วเท่านั้น ไม่ครอบคลุมการ attach executor
+หรือการดาวน์โหลด `Main.lua` ด้วย loader ภายนอก หากสร้าง GUI ไม่ได้จะเตือนและโหลดต่อ
+ใช้ CoreGui เมื่อมีสิทธิ์ และ fallback ไป PlayerGui; ไม่มี Drawing หรือไฟล์ภาพภายนอก
+
+Loader suite ตรวจ startup แบบมีการ yield, success/failure, Cancel, rerun ระหว่างเริ่มงาน
+และ HTTP response ที่กลับมาหลัง session ถูกแทนที่ พร้อมตรวจ cleanup ของ handlers
+ยังต้องตรวจภาพจริง ขนาดหน้าจอ ปุ่ม Cancel/Close และ fallback สิทธิ์บน executor จริง
+
 ## Control Center
 
 คู่มือฟีเจอร์ใหม่อยู่ใน [control-center.md](../docs/control-center.md)
