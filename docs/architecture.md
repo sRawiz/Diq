@@ -34,7 +34,8 @@ python tools/build.py
 ไม่ถือว่าการทดสอบ CLI ยืนยันสิทธิ์ executor
 
 `module-manifest.json` ระบุ entry และรายชื่อโมดูลที่รวมใน bundle
-เมื่อเพิ่มโมดูล ให้เพิ่มใน manifest และลงทะเบียนการโหลด/cleanup ใน Main
+เมื่อเพิ่มโมดูลระดับโปรเจกต์ ให้เพิ่มใน manifest และลงทะเบียนการโหลด/cleanup ใน Main
+components ภายใน `ui/` รวมเข้า DiqUILib ตอน build โดยไม่เพิ่ม entry ใน manifest นี้
 ไฟล์ bundle มี source digest สำหรับระบุ build และไม่ถูก commit โดยอัตโนมัติ
 
 ## Infrastructure.lua
@@ -80,6 +81,10 @@ Property ownership ยึด baseline ก่อน claim แรก ไม่ใ�
 - Anti-AFK ปิดตัวเองและเผยแพร่สถานะเมื่อเรียก VirtualUser ไม่สำเร็จ การมี service ไม่ใช่หลักฐานว่ามีสิทธิ์เรียก
 
 ## UI lifecycle
+
+ซอร์ส UI แยกอยู่ใน `ui/` และ build เป็น `DiqUILib.lua` สำหรับ loader เดิม
+ดูโครงสร้าง components, dependencies, composition และวิธีเพิ่ม controls ใน [UI components](ui-components.md)
+เมื่อแก้ UI ให้ build ก่อน; `--check-ui` ตรวจว่า generated artifact ตรงกับซอร์ส
 
 แต่ละ control มี tracker ย่อย ยกเลิก input/tasks และถอนตัวจาก ResetAll เมื่อถูกลบ
 section เป็นเจ้าของ controls ลูก และ dropdown option rebuild ปิด handlers ชุดก่อน

@@ -1,5 +1,14 @@
 # Diq verification
 
+## UI components
+
+แก้ซอร์สใน `ui/` แล้วใช้ `python tools/build.py` เพื่อสร้าง `DiqUILib.lua` และ bundle
+ดู [คู่มือ components](../docs/ui-components.md) สำหรับ API, ownership และการเพิ่ม controls
+`python tests/test_ui_build.py` ตรวจ dependency/cycle, deterministic output และ stale artifact
+`run_infrastructure.py` ตรวจ freshness, compile ทุก UI component และรัน Components suite เพิ่มจาก UI suite เดิม
+Components suite ใช้ production constructors โดยไม่มี Window/Tab และตรวจ composed Slider/Hotkey,
+nested sections, partial startup rollback และการปิดหน้าต่างเดิมหลังเปิดหน้าต่างใหม่
+
 ## Loading screen
 
 `Main.lua` แสดงหน้า Loading ก่อนดาวน์โหลดโมดูล โดยใช้ GUI ที่สร้างในไฟล์เอง

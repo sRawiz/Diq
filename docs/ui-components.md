@@ -1,0 +1,116 @@
+# Diq UI components
+
+ซอร์ส UI อยู่ใน `ui/` ส่วน `DiqUILib.lua` ที่ root เป็นไฟล์ generated สำหรับ loader เดิม
+แก้ไฟล์ใน `ui/` แล้ว build เสมอ อย่าแก้ generated file โดยตรง
+ยังคืนตาราง UI และรองรับ `CreateWindow`, `CreateTab`, `CreateToggle`, `Notify`, `LoadIcons`,
+`SetTheme`, `Destroy` รวมถึงรูปแบบ dot/colon และค่า return ของ controls ตามเดิม
+ไม่มี dependency เพิ่ม ไม่มี Studio ModuleScript และไม่ใช้ filesystem API ของ executor
+
+## เลือกไฟล์ที่จะแก้
+
+| ส่วน | ไฟล์/โฟลเดอร์ | ความรับผิดชอบ |
+|---|---|---|
+| Public API | `ui/init.lua` | ส่ง options/Runtime เข้า UI, เก็บหน้าต่างปัจจุบัน, rollback เมื่อสร้างไม่สำเร็จ |
+| สี | `ui/core/Theme.lua` | theme แยกต่อ UI instance, whitelist ของ `SetTheme` |
+| รูปแบบร่วม | `ui/core/Tokens.lua` | ฟอนต์ ขนาดข้อความ มุมโค้ง และระยะห่างหลัก |
+| Cleanup | `ui/core/Lifecycle.lua` | tracker, งาน callback ที่ yield, reset registration และ setters หลัง Destroy |
+| Input | `ui/core/Input.lua` | รับ input ผ่าน Runtime เมื่อมี, dispatcher สำหรับ slider และการลากหน้าต่าง |
+| GUI helpers | `ui/core/Primitives.lua` | Tween, corner, stroke, padding, section styling และ icons |
+| Layout | `ui/layout/Window.lua`, `Tab.lua`, `Section.lua` | หน้าต่าง การสลับแท็บ และ ownership ของ containers |
+| API adapter | `ui/layout/Container.lua` | แปลง `tab:Create*` / `section:Create*` ไปเป็น constructor ของ component |
+| Controls | `ui/components/` | Button, Label, Toggle, Slider, Dropdown, Input, Keybind, Hotkey |
+| ชุด controls | `ui/blocks/SettingRow.lua` | ประกอบ Toggle + Hotkey + Slider โดยใช้ slider implementation เดียว |
+| การ์ด | `ui/blocks/ProfileCard.lua` | แสดงโปรไฟล์ ชื่อเกม และเวลา session พร้อมงานที่ยกเลิกได้ |
+| แจ้งเตือน | `ui/overlays/Notification.lua` | GUI และ timer ของ notifications |
+
+หน้าตาและค่าเริ่มต้นยังอิงของเดิม การ refactor นี้ไม่ได้เพิ่มระบบ reactive rendering
+`SetTheme` ยังคงแก้ตารางสีที่การสร้าง/อัปเดตครั้งถัดไปอ่าน ไม่ repaint ทุก instance ทันที
+Tokens เป็นค่าร่วมแบบอ่านอย่างเดียวตอน runtime; แก้ source แล้ว build เมื่อต้องการเปลี่ยน
+ค่าระยะเฉพาะ component ยังอยู่ในไฟล์ component เพื่อไม่ทำให้รูปแบบที่ต่างกันผูกกันทั้งหมด
+
+## Module และ component contract
+
+แต่ละไฟล์รับ `local import = ...` เพื่อเรียก dependency จาก registry ภายในไฟล์ generated
+ใช้ชื่อ module แบบ literal เช่น `import("core/Lifecycle")` ไม่ใช้ `require(script.Parent...)`
+build ตรวจ dependency ที่ขาดและวงจร import ก่อนสร้าง artifact
+ไฟล์ภายในเป็น factory ที่คืน constructor; ไม่มีการสร้าง GUI เมื่อเพียง import module
+
+Constructor ของ control รับ `ctx` ตามด้วย arguments ของ API เดิม เช่น
+`Slider(ctx, text, min, max, default, callback, options)`
+`ctx` เป็น dependencies สำหรับ container นี้ ไม่ใช่ทั้ง App หรือ Window:
+
+| Field | ใช้เมื่อ |
+|---|---|
+| `Parent` | parent Instance ที่ component ต้อง mount ลงไป |
+| `Scope` | tracker ของเจ้าของ; component สร้าง tracker ลูกของตัวเอง |
+| `Theme`, `Primitives` | วาดและอัปเดต appearance |
+| `Register(obj, scope, resettable)` | ผูก Destroy, setters และ ResetAll registration |
+| `Section` | ต้องการ separator/appearance ภายใน section |
+| `Input`, `Capture` | control รับปุ่มลัดหรือ capture key |
+| `BindSliderDrag` | control เป็น slider; dispatcher ร่วมต่อหน้าต่าง |
+| `BindContainer` | Section ต้องติดตั้ง Create* methods ให้ลูก |
+
+ให้อ่านเฉพาะ fields ที่ component ใช้ เช่น Label ไม่ต้องรู้จัก Input หรือ Capture
+`Toggle.Root`, `Header`, `Scope`, `LabelOffset` และ `Slider.Root` เป็น hooks ภายในสำหรับ composition
+ไม่ต้องใช้ hooks เหล่านี้เมื่อเรียก API เดิมผ่าน Tab/Section
+
+Hotkey เป็นปุ่มจับและเรียก shortcut ขนาดเล็กข้าง toggle ส่วน Keybind เป็นแถวตั้งค่าปุ่มลัด
+ที่มี `OnChanged`/`OnListeningChanged` และ Escape เพื่อยกเลิก capture; แยกกันเพื่อรักษาพฤติกรรมเดิม
+
+## ประกอบและเพิ่ม controls
+
+`tab:CreateToggle(...)` ส่งต่อไป SettingRow ซึ่งสร้าง Toggle แล้วเพิ่ม Hotkey/Slider ตาม config
+Slider มี presentation ปกติและ `Compact` แต่ใช้การ clamp, quantize, drag, text input และ callback ร่วมกัน
+คง `GetSlider()` / `SetSlider(value, silent)` ของ toggle เดิม
+slider ที่ฝังอยู่ไม่ลงทะเบียน ResetAll แยก: Reset ของ toggle ยังรีเซ็ตเฉพาะสวิตช์ตามพฤติกรรมเดิม
+
+เมื่อเพิ่ม component:
+
+1. สร้างไฟล์ใน `ui/components/` รับ ctx และคืน handle ที่มี `Destroy()`/`SetVisible()` ตามหน้าที่
+2. สร้าง tracker ลูกจาก `ctx.Scope` และลงทะเบียน events/tasks ทุกตัว
+3. งานที่ yield ให้ผ่าน `scope:Invoke` / `scope:Spawn` / `scope:Delay`
+4. เรียก `ctx.Register(handle, scope, resettable)`; เฉพาะ control ที่มีค่าและ Reset จึงส่ง true
+5. เพิ่ม constructor ใน `ui/layout/Container.lua` เมื่อต้องการเปิดเป็น Create* API
+6. ถ้าเป็นชุด controls ให้ประกอบใน `ui/blocks/` และส่ง Scope/Parent ของเจ้าของไปยังลูก
+7. เพิ่มกรณีทดสอบพฤติกรรมหรือ ownership ที่เปลี่ยน แล้ว build
+
+Window → Tab → Section → Control เป็นลำดับ ownership
+การปิดเจ้าของจะ cleanup ลูกด้วย; scope ของ slider/hotkey ที่ฝังอยู่ขึ้นกับ toggle
+ห้ามเพิ่ม global InputChanged/InputEnded แยกต่อ slider
+UI ยังใช้ tracker เดิมที่รักษา callbacks แบบ synchronous เมื่อไม่ yield;
+ไม่ได้สลับไปใช้ Infrastructure.Scope ซึ่งมี contract ต่างกัน
+
+## Build และแจกจ่าย
+
+```powershell
+python tools/build.py
+python tools/build.py --ui-only
+python tools/build.py --check-ui
+```
+
+คำสั่งแรกสร้างทั้ง `DiqUILib.lua` และ `dist/Diq.lua`
+`--ui-only` สร้างเฉพาะ UI artifact; `--check-ui` ไม่เขียนไฟล์และคืน error ถ้า artifact ไม่ตรง source
+ไฟล์ `.lua` ใน `ui/` ถูกค้นหาอัตโนมัติและรวมเป็น factories ใน registry ภายใน
+ไม่ต้องเพิ่ม components เหล่านี้ใน root `module-manifest.json`
+root manifest ยังมี `DiqUILib` หนึ่ง entry และ Main ยังดาวน์โหลด UI เพียงไฟล์เดียวจาก commit เดิม
+commit `ui/` และ `DiqUILib.lua` ที่สร้างใหม่พร้อมกัน; `dist/` ยังเป็น output ที่ถูก gitignore
+ยังต้อง publish ตาม workflow เดิมก่อน remote loader จะได้รับรุ่นใหม่
+
+Loading ใน Main ยังเป็น bootstrap ที่ไม่พึ่ง UI Lib เพื่อแสดงก่อนดาวน์โหลดโมดูลได้
+
+## ตรวจสอบ
+
+```powershell
+python tests/test_ui_build.py
+python tests/run_infrastructure.py --luau-dir C:/path/to/luau
+```
+
+runner ตรวจ artifact freshness และ compile ทั้ง source components, root modules และ bundle
+UI suite เดิมตรวจ compatibility; Components suite ทดสอบ component เดี่ยว, composition,
+section nesting, cancellation, window replacement และการ rollback เมื่อสร้าง UI ล้มเหลว
+Loader/ControlCenter suites ใช้ generated UI จริง
+ทั้งหมดเป็น static/engine mocks ไม่ยืนยัน layout, input timing หรือสิทธิ์บน executor จริง
+
+Live acceptance: เปิดทุกแท็บ, ทดลอง slider ทั้งสองรูปแบบด้วยเมาส์/สัมผัส/พิมพ์ค่า,
+capture/cancel keybind, สร้าง controls ใน section ซ้อน, เปลี่ยน dropdown options,
+ปิด/เปิดหน้าต่างซ้ำ และตรวจ Loading/notifications รวมถึง fallback ไป PlayerGui

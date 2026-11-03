@@ -3,6 +3,7 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+from ui_build import build_ui, check_ui
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -16,6 +17,7 @@ def build() -> str:
         if not name.isidentifier():
             raise ValueError('Module names must be identifiers')
     sources = {name: (ROOT / f'{name}.lua').read_text(encoding='utf-8-sig') for name in names}
+    sources['DiqUILib'] = build_ui()
     digest = hashlib.sha256()
     for name, source in sources.items():
         digest.update(name.encode())
@@ -41,7 +43,16 @@ def build() -> str:
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, default=ROOT / 'dist/Diq.lua')
+    parser.add_argument('--ui-only', action='store_true', help='Regenerate only the compatible DiqUILib.lua artifact')
+    parser.add_argument('--check-ui', action='store_true', help='Fail if the committed UI artifact is stale; write nothing')
     args = parser.parse_args()
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(build(), encoding='utf-8', newline='\n')
-    print(f'Built {args.output.resolve()}')
+    if args.check_ui:
+        check_ui()
+        print('UI artifact matches ui/ sources')
+    else:
+        (ROOT / 'DiqUILib.lua').write_text(build_ui(), encoding='utf-8', newline='\n')
+        print('Built DiqUILib.lua from ui/')
+        if not args.ui_only:
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            args.output.write_text(build(), encoding='utf-8', newline='\n')
+            print(f'Built {args.output.resolve()}')
