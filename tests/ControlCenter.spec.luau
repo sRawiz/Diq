@@ -64,6 +64,19 @@ click("Find New Server")
 press("End"); release("End")
 check(not captured.MiscSystem.CancelServerSearch(), "Emergency stop cancels server discovery")
 game.HttpGet = nil
+local matchmakingCalls = 0
+local originalTeleport = TeleportService.Teleport
+function TeleportService:Teleport(placeId, player)
+	check(placeId == game.PlaceId and player == own, "Best Server button requests matchmaking for the local player")
+	matchmakingCalls += 1
+end
+click("Find Best Server (Roblox)")
+check(matchmakingCalls == 1 and not captured.MiscSystem.ServerHop(), "Best Server button uses the shared teleport lock")
+TeleportService.TeleportInitFailed:Fire(own, Enum.TeleportResult.Flooded, "test", game.PlaceId)
+check(warnings[#warnings] == "[Diq] Too many teleport requests. Wait a moment and try again.",
+	"Best Server reports the simulated Roblox failure")
+table.remove(warnings) -- This warning is expected; keep the final unexpected-warning check.
+TeleportService.Teleport = originalTeleport
 press("Q"); check(captured.AimbotSystem.IsEnabled(), "Q enables aim once, no legacy double dispatch")
 press("Q"); check(captured.AimbotSystem.IsEnabled(), "Repeated InputBegan cannot toggle twice before release")
 release("Q"); press("Q"); release("Q"); check(not captured.AimbotSystem.IsEnabled(), "Second complete key press disables")

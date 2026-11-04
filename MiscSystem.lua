@@ -70,7 +70,11 @@ local function startTeleport(operation, jobId)
 		finishServer(operation, "Failed", "Teleport failure events are unavailable in this runtime.")
 		return false
 	end
-	serverStatus("Teleporting", jobId == game.JobId and "Rejoining the current server..." or "Joining another server...")
+	local message = jobId == game.JobId and "Rejoining the current server..." or "Joining another server..."
+	if operation.Matchmaking then
+		message = "Asking Roblox to choose a server for your connection. It may select this server again."
+	end
+	serverStatus("Teleporting", message)
 	if destroyed or serverOperation ~= operation then return false end
 	-- Client/executor runtime: TeleportAsync is server-only. Keep the client API.
 	local ok = pcall(function()
@@ -154,6 +158,15 @@ function MiscSystem.CancelServerSearch()
 	return true
 end
 function MiscSystem.SetServerListener(callback) serverListener = callback end
+function MiscSystem.FindBestServer()
+	local operation, reason = beginServer("Teleporting")
+	if not operation then return false, reason end
+	-- Let Roblox use its per-player location/latency signals. The public server
+	-- list does not provide a measured RTT from this player to each candidate.
+	-- No JobId means matchmaking, so we cannot promise a different/nearest server.
+	operation.Matchmaking = true
+	return startTeleport(operation, nil)
+end
 local function applyLighting()
 	if destroyed or not State.IsFullbright then return end
 	for property, value in desired do

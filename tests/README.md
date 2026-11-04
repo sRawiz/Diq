@@ -2,6 +2,16 @@
 
 ## หาและย้ายเซิร์ฟเวอร์
 
+**Find Best Server (Roblox)** ให้ Roblox เลือกเซิร์ฟเวอร์โดยไม่ระบุ JobId
+เหมาะเมื่อต้องการให้คำนึงถึงตำแหน่งและความหน่วงของผู้ใช้ ตาม
+[สัญญาณ matchmaking ของ Roblox](https://create.roblox.com/docs/matchmaking/attributes-and-signals)
+ระบบยังใช้ปัจจัยอื่น เช่น เพื่อนในเซิร์ฟเวอร์ จึงไม่รับประกันว่าได้เซิร์ฟเวอร์ใกล้ที่สุด
+ping ต่ำที่สุด หรือเปลี่ยน JobId เสมอ ปุ่มนี้แสดงข้อจำกัดไว้ในหน้า Settings
+ใช้ `MiscSystem.FindBestServer()` ซึ่งคืน boolean ผลการส่งคำขอ เช่นเดียวกับ Rejoin
+ใช้ล็อก/timeout/TeleportInitFailed/cleanup ร่วมกับคำสั่งย้ายเซิร์ฟเดิม และไม่ต้องดาวน์โหลดรายชื่อเซิร์ฟเวอร์
+ยังใช้ client `Teleport` ตาม executor runtime เดิม ไม่เรียก `TeleportAsync` ที่ต้องทำงานบน server
+ไม่มีการอ่าน IP หรือส่งตำแหน่งผู้ใช้ให้บริการภายนอก
+
 หน้า Settings > SERVER MANAGEMENT มี Find New Server สำหรับค้นหาแล้วเข้าร่วม
 public server ของ PlaceId เดิมที่ยังไม่เต็มและไม่ใช่ JobId ปัจจุบัน โดยไล่ได้สูงสุด 10 หน้า
 Cancel Server Search หรือปุ่ม End ยกเลิกช่วงค้นหาได้ ส่วน Rejoin Server ยังคงใช้สำหรับเข้าเซิร์ฟเดิม
@@ -24,7 +34,11 @@ Failed หรือ Cancelled; Teleporting หมายถึงกำลัง�
 
 `run_infrastructure.py` รวม Misc suite: pagination, server filtering, malformed response,
 HTTP failure/timeout, teleport failure/timeout, duplicate actions, cancel และ cleanup
-ControlCenter suite ตรวจปุ่มค้นหา/ยกเลิกจริงและปุ่ม End ด้วย engine mocks
+ControlCenter suite ตรวจปุ่มค้นหา/ยกเลิก/Find Best Server จริงและปุ่ม End ด้วย engine mocks
+Misc suite ตรวจ matchmaking โดยไม่กำหนด JobId/ไม่เรียก HTTP, ล็อกคำขอซ้อน,
+ความล้มเหลวทั้งทันทีและภายหลัง, timeout และ cleanup
+ยังไม่ได้ตรวจว่า matchmaking เลือกภูมิภาคใดหรือช่วยลด ping ในเกมจริง
+ให้ทดลอง Find Best Server แล้วเทียบ ping ก่อน/หลัง และเผื่อกรณี Roblox เลือกเซิร์ฟเดิม
 ยังไม่ได้ทดสอบ HTTP หรือ teleport บน Roblox/executor จริง ต้องตรวจว่า JobId หลังย้ายเปลี่ยนไป
 และลองกดซ้ำ/ปิดแผงระหว่างค้นหา รวมถึงตรวจข้อความเมื่อ HTTP ถูกบล็อกหรือเซิร์ฟเวอร์เต็ม
 ใช้ `python tools/build.py` เพื่อสร้าง `dist/Diq.lua` จากไฟล์ในเครื่อง

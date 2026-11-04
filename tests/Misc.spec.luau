@@ -112,4 +112,32 @@ check(misc.Rejoin() and teleports[1][2] == game.JobId, "Existing Rejoin targets 
 check(not misc.ServerHop(), "Rejoin and server hop share a lock")
 misc.Destroy(); advance(60)
 check(liveConnections() == baseline and next(queue) == nil, "Repeated module sessions leave no server resources")
+
+reset(); game.HttpGet = nil
+check(misc.FindBestServer(), "Matchmaking starts without executor HTTP support")
+check(#teleports == 1 and teleports[1][1] == game.PlaceId and teleports[1][2] == nil and teleports[1][3] == own,
+	"Matchmaking lets Roblox select the destination for the local player")
+check(lastPhase() == "Teleporting" and statuses[#statuses][2]:find("may select this server", 1, true),
+	"Matchmaking reports a request and explicitly permits the current server")
+check(#urls == 0 and not misc.FindBestServer() and not misc.ServerHop() and not misc.Rejoin(),
+	"All server actions share the matchmaking lock without HTTP discovery")
+check(not misc.CancelServerSearch(), "Search cancellation does not claim to cancel a sent matchmaking teleport")
+TeleportService.TeleportInitFailed:Fire(own, Enum.TeleportResult.Flooded, "secret", game.PlaceId)
+check(lastPhase() == "Failed" and TeleportService.TeleportInitFailed:Count() == 0,
+	"Matchmaking failure is reported and releases its handler")
+check(misc.FindBestServer(), "Matchmaking can be retried after a failure")
+advance(45)
+check(lastPhase() == "Failed" and misc.ServerHop(), "Matchmaking timeout releases the shared lock")
+check(not misc.FindBestServer(), "Matchmaking cannot interrupt an active public server search")
+misc.CancelServerSearch()
+function TeleportService:Teleport() error("secret-matchmaking-error") end
+check(not misc.FindBestServer() and lastPhase() == "Failed", "Matchmaking preserves synchronous teleport failure result")
+check(not statuses[#statuses][2]:find("secret", 1, true), "Matchmaking errors do not leak raw runtime details")
+check(TeleportService.TeleportInitFailed:Count() == 0, "Rejected matchmaking requests release their listener")
+reset(); misc.FindBestServer()
+local beforeMatchmakingDestroy = #statuses
+misc.Destroy(); advance(60)
+check(not misc.FindBestServer() and #statuses == beforeMatchmakingDestroy,
+	"Destroyed matchmaking sessions cannot notify or start new requests")
+check(liveConnections() == baseline and next(queue) == nil, "Matchmaking teardown releases all owned resources")
 print("Misc: " .. checks .. " checks passed")
