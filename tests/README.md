@@ -46,6 +46,13 @@ Misc suite ตรวจ matchmaking โดยไม่กำหนด JobId/ไ�
 
 ## UI components
 
+Workspace layout: หน้าแรก Quick Actions, sidebar ย่ออัตโนมัติและย่อด้วยปุ่มได้,
+การ์ดคำสั่งเปลี่ยน 2 → 1 คอลัมน์ตามความกว้าง และปุ่มเดี่ยวขนาดตามข้อความ
+Components suite ตรวจ resize, การกดการ์ดไม่แก้ขนาดที่ grid จัดไว้, navigation ในโหมดย่อ,
+และ cleanup ระหว่าง callback รอทำงาน ส่วน ControlCenter suite ตรวจ profile IDs และ
+การนำทางกลับแท็บเจ้าของหลังย้าย controls เข้า section
+ยังต้องตรวจภาพจริงและ input บน Roblox/executor โดยเฉพาะจอเล็ก dropdown และการลากหน้าต่าง
+
 แก้ซอร์สใน `ui/` แล้วใช้ `python tools/build.py` เพื่อสร้าง `DiqUILib.lua` และ bundle
 ดู [คู่มือ components](../docs/ui-components.md) สำหรับ API, ownership และการเพิ่ม controls
 `python tests/test_ui_build.py` ตรวจ dependency/cycle, deterministic output และ stale artifact

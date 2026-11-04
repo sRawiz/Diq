@@ -39,6 +39,7 @@ return function(Theme, getIcons)
 	end
 
 	local function ApplySectionStyle(frame, sectionRef)
+		frame.BorderSizePixel = 0
 		local isSection = sectionRef and sectionRef._isSection
 		if isSection then
 			frame.BackgroundTransparency = 1

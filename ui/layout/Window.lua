@@ -16,7 +16,7 @@ return function(ctx, config)
 	local capture = {}
 
 	local windowTitle = config.Title or "Diq Panel"
-	local windowSize  = config.Size or UDim2.new(0, 520, 0, 380)
+	local windowSize  = config.Size or UDim2.new(0.92, 0, 0.88, 0)
 	local toggleKey   = config.ToggleKey or Enum.KeyCode.K
 
 	local Window = {}
@@ -81,19 +81,24 @@ return function(ctx, config)
 	MainFrame.BorderSizePixel = 0
 	MainFrame.ClipsDescendants = true
 	MainFrame.Parent = ScreenGui
-	ApplyCorner(MainFrame, 10)
+	ApplyCorner(MainFrame, 18)
 	ApplyStroke(MainFrame, Theme.Outline, 1)
+	if not config.Size then
+		local bounds = Instance.new("UISizeConstraint")
+		bounds.MaxSize = Vector2.new(920, 660)
+		bounds.Parent = MainFrame
+	end
 
 	-- 🎬 Open animation
-	Tween(MainFrame, 0.45, { Size = windowSize }, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+	MainFrame.Size = windowSize
 
 	-- ==========================================
 	-- 🔝 Top Bar
 	-- ==========================================
 	local TopBar = Instance.new("Frame")
 	TopBar.Name = "TopBar"
-	TopBar.Size = UDim2.new(1, 0, 0, 40)
-	TopBar.BackgroundColor3 = Theme.Sidebar
+	TopBar.Size = UDim2.new(1, 0, 0, 52)
+	TopBar.BackgroundColor3 = Theme.Background
 	TopBar.BorderSizePixel = 0
 	TopBar.Parent = MainFrame
 	ApplyCorner(TopBar, 10)
@@ -102,19 +107,28 @@ return function(ctx, config)
 	local topBarCover = Instance.new("Frame")
 	topBarCover.Size = UDim2.new(1, 0, 0, 12)
 	topBarCover.Position = UDim2.new(0, 0, 1, -12)
-	topBarCover.BackgroundColor3 = Theme.Sidebar
+	topBarCover.BackgroundColor3 = Theme.Background
 	topBarCover.BorderSizePixel = 0
 	topBarCover.Parent = TopBar
 
 	MakeDraggable(TopBar, MainFrame, connections)
 
-	-- Icon ธีม Gemini (ประกายดาว)
-	AttachIcon("sparkles", TopBar, 18, Theme.Accent, UDim2.new(0, 15, 0.5, -9))
+	local SidebarBtn = Instance.new("TextButton")
+	SidebarBtn.Name = "ToggleSidebar"
+	SidebarBtn.Size = UDim2.fromOffset(30, 30)
+	SidebarBtn.Position = UDim2.new(0, 12, 0.5, -15)
+	SidebarBtn.BackgroundTransparency = 1
+	SidebarBtn.Text = ""
+	SidebarBtn.Parent = TopBar
+	if not AttachIcon("panel-left", SidebarBtn, 18, Theme.SubText, UDim2.new(0.5, -9, 0.5, -9)) then
+		SidebarBtn.Text = "☰"; SidebarBtn.TextSize = 18; SidebarBtn.TextColor3 = Theme.Text
+	end
 
 	-- ชื่อหน้าต่าง
 	local TitleLabel = Instance.new("TextLabel")
-	TitleLabel.Size = UDim2.new(1, -110, 1, 0)
-	TitleLabel.Position = UDim2.new(0, 42, 0, 0) -- เลื่อนหลบ Icon
+	TitleLabel.Size = UDim2.new(1, -136, 1, 0)
+	TitleLabel.Position = UDim2.new(0, 54, 0, 0)
+	TitleLabel.TextTruncate = Enum.TextTruncate.AtEnd
 	TitleLabel.BackgroundTransparency = 1
 	TitleLabel.Text = windowTitle
 	TitleLabel.TextColor3 = Theme.Text
@@ -174,8 +188,8 @@ return function(ctx, config)
 	-- ==========================================
 	local Body = Instance.new("Frame")
 	Body.Name = "Body"
-	Body.Size = UDim2.new(1, 0, 1, -40)
-	Body.Position = UDim2.new(0, 0, 0, 40)
+	Body.Size = UDim2.new(1, 0, 1, -52)
+	Body.Position = UDim2.new(0, 0, 0, 52)
 	Body.BackgroundTransparency = 1
 	Body.Parent = MainFrame
 
@@ -184,7 +198,7 @@ return function(ctx, config)
 	-- ==========================================
 	local Sidebar = Instance.new("Frame")
 	Sidebar.Name = "Sidebar"
-	Sidebar.Size = UDim2.new(0, 135, 1, 0)
+	Sidebar.Size = UDim2.new(0, 184, 1, 0)
 	Sidebar.BackgroundColor3 = Theme.Sidebar
 	Sidebar.BorderSizePixel = 0
 	Sidebar.Parent = Body
@@ -192,14 +206,37 @@ return function(ctx, config)
 	-- Tab Container (เลื่อนได้ถ้าแท็บเยอะ)
 	local TabContainer = Instance.new("ScrollingFrame")
 	TabContainer.Name = "TabContainer"
-	TabContainer.Size = UDim2.new(1, -10, 1, -15)
-	TabContainer.Position = UDim2.new(0, 5, 0, 10)
+	TabContainer.Size = UDim2.new(1, -16, 1, -108)
+	TabContainer.Position = UDim2.new(0, 8, 0, 34)
 	TabContainer.BackgroundTransparency = 1
 	TabContainer.ScrollBarThickness = 2
 	TabContainer.ScrollBarImageColor3 = Theme.Outline
 	TabContainer.BorderSizePixel = 0
 	TabContainer.CanvasSize = UDim2.new(0, 0, 0, 0)
 	TabContainer.Parent = Sidebar
+	local navigationLabel = Instance.new("TextLabel")
+	navigationLabel.Size = UDim2.new(1, -28, 0, 24)
+	navigationLabel.Position = UDim2.fromOffset(14, 4)
+	navigationLabel.BackgroundTransparency = 1
+	navigationLabel.Text = "WORKSPACE"
+	navigationLabel.Font = Tokens.Font.Label
+	navigationLabel.TextSize = 10
+	navigationLabel.TextColor3 = Theme.DimText
+	navigationLabel.TextXAlignment = Enum.TextXAlignment.Left
+	navigationLabel.Parent = Sidebar
+	local account = Instance.new("TextLabel")
+	account.Name = "SidebarAccount"
+	account.Size = UDim2.new(1, -24, 0, 48)
+	account.Position = UDim2.new(0, 12, 1, -60)
+	account.BackgroundColor3 = Theme.ElementBg
+	account.BorderSizePixel = 0
+	account.Text = Players.LocalPlayer.Name
+	account.TextColor3 = Theme.SubText
+	account.TextSize = Tokens.Text.Small
+	account.Font = Tokens.Font.Label
+	account.TextTruncate = Enum.TextTruncate.AtEnd
+	account.Parent = Sidebar
+	ApplyCorner(account, 12)
 
 	local tabListLayout = Instance.new("UIListLayout")
 	tabListLayout.Padding = UDim.new(0, 4)
@@ -213,7 +250,8 @@ return function(ctx, config)
 	-- เส้นแบ่ง Sidebar กับ Content
 	local SidebarDivider = Instance.new("Frame")
 	SidebarDivider.Size = UDim2.new(0, 1, 1, 0)
-	SidebarDivider.Position = UDim2.new(0, 135, 0, 0)
+	SidebarDivider.Position = UDim2.new(0, 184, 0, 0)
+	SidebarDivider.BackgroundTransparency = 0.6
 	SidebarDivider.BackgroundColor3 = Theme.Outline
 	SidebarDivider.BorderSizePixel = 0
 	SidebarDivider.Parent = Body
@@ -223,10 +261,27 @@ return function(ctx, config)
 	-- ==========================================
 	local ContentArea = Instance.new("Frame")
 	ContentArea.Name = "ContentArea"
-	ContentArea.Size = UDim2.new(1, -136, 1, 0)
-	ContentArea.Position = UDim2.new(0, 136, 0, 0)
+	ContentArea.Size = UDim2.new(1, -185, 1, 0)
+	ContentArea.Position = UDim2.new(0, 185, 0, 0)
 	ContentArea.BackgroundTransparency = 1
 	ContentArea.Parent = Body
+	local collapseRequested = false
+	local function updateSidebar()
+		local compact = collapseRequested or MainFrame.AbsoluteSize.X < 680
+		local width = compact and 56 or 184
+		Sidebar.Size = UDim2.new(0, width, 1, 0)
+		SidebarDivider.Position = UDim2.fromOffset(width, 0)
+		ContentArea.Position = UDim2.fromOffset(width + 1, 0)
+		ContentArea.Size = UDim2.new(1, -width - 1, 1, 0)
+		navigationLabel.Visible = not compact
+		account.Text = compact and Players.LocalPlayer.Name:sub(1, 1):upper() or Players.LocalPlayer.Name
+		for _, tab in tabs do tab:_SetCompact(compact) end
+	end
+	connections:Track(MainFrame:GetPropertyChangedSignal("AbsoluteSize"):Connect(updateSidebar))
+	connections:Track(SidebarBtn.MouseButton1Click:Connect(function()
+		collapseRequested = not collapseRequested; updateSidebar()
+	end))
+	updateSidebar()
 
 	-- ==========================================
 	-- 🔀 Tab Switching Logic
@@ -244,6 +299,7 @@ return function(ctx, config)
 
 		-- เปิดแท็บใหม่
 		activeTab = targetTab
+		TitleLabel.Text = windowTitle .. " / " .. targetTab.Name
 		activeTab._content.Visible = true
 		Tween(activeTab._button, 0.2, { BackgroundColor3 = Theme.ActiveTab, BackgroundTransparency = 0 })
 		Tween(activeTab._label, 0.2, { TextColor3 = Theme.Text })
@@ -253,15 +309,16 @@ return function(ctx, config)
 	-- ==========================================
 	-- 📑 CreateTab — สร้างแท็บใหม่
 	-- ==========================================
-	function Window:CreateTab(tabName, tabIcon)
+	function Window:CreateTab(tabName, tabIcon, options)
 		assert(connections.Alive, "Cannot add tabs to a destroyed window")
 		local tab = CreateTab({
 			Theme = Theme, Primitives = ctx.Primitives, Scope = connections, GetIcons = ctx.GetIcons,
 			TabContainer = TabContainer, ContentArea = ContentArea, Controls = controls,
 			IsActive = function(candidate) return activeTab == candidate end,
 			Select = SwitchTab,
-		}, tabName, tabIcon)
+		}, tabName, tabIcon, options)
 		table.insert(tabs, tab)
+		updateSidebar()
 		if #tabs == 1 then SwitchTab(tab) end
 		return tab
 	end
@@ -274,7 +331,7 @@ return function(ctx, config)
 	connections:Track(MinBtn.MouseButton1Click:Connect(function()
 		isMinimized = not isMinimized
 		if isMinimized then
-			Tween(MainFrame, 0.3, { Size = UDim2.new(0, fullSize.X.Offset, 0, 40) })
+			Tween(MainFrame, 0.3, { Size = UDim2.new(fullSize.X.Scale, fullSize.X.Offset, 0, 52) })
 			Body.Visible = false
 			MinBtn.Text = "□"
 		else
@@ -334,7 +391,8 @@ return function(ctx, config)
 	end
 
 	function Window:SetTitle(newTitle)
-		TitleLabel.Text = newTitle
+		windowTitle = newTitle
+		TitleLabel.Text = newTitle .. (activeTab and " / " .. activeTab.Name or "")
 	end
 
 	function Window:Destroy()

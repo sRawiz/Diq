@@ -17,8 +17,7 @@ return function(ctx, text, placeholder, callback, options)
 	frame.Size = UDim2.new(1, 0, 0, 36)
 	frame.BackgroundColor3 = Theme.ElementBg
 	frame.Parent = targetParent
-	ApplyCorner(frame, Tokens.Radius.Control)
-	ApplyStroke(frame, Theme.Outline)
+	ctx.Primitives.ApplySectionStyle(frame, ctx.Section)
 
 	local lbl = Instance.new("TextLabel")
 	lbl.Size = UDim2.new(0.4, -10, 1, 0)
@@ -29,6 +28,7 @@ return function(ctx, text, placeholder, callback, options)
 	lbl.Font = Tokens.Font.Label
 	lbl.TextSize = Tokens.Text.Body
 	lbl.TextXAlignment = Enum.TextXAlignment.Left
+	lbl.TextTruncate = Enum.TextTruncate.AtEnd
 	lbl.Parent = frame
 
 	local inputBox = Instance.new("TextBox")

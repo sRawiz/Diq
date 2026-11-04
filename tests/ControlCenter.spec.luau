@@ -28,6 +28,10 @@ local app, err = factories.Main({Factories=injected})
 check(app ~= nil, "Control center starts with production UI: " .. tostring(err))
 local tools = app.Tools
 local settings, keys = tools.Settings, tools.Keys
+check(tools.QuickTab._content.Visible, "Workspace opens on Quick Actions")
+check(tools.Controls["movement.cframe_fly"].Tab.Name == "Movement"
+	and tools.Controls["movement.cframe_fly"].Widget.Root.Parent.Name == "SettingsSection",
+	"Grouped controls preserve profile identifiers and navigate to their owning page")
 local function labelObject(text)
 	for _, object in instances do
 		if object.ClassName=="TextLabel" and object.Text==text and object.Parent then return object end

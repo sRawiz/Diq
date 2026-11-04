@@ -40,6 +40,7 @@ return function(ctx, text, default, callback, config)
 	lbl.Font = Tokens.Font.Label
 	lbl.TextSize = Tokens.Text.Body
 	lbl.TextXAlignment = Enum.TextXAlignment.Left
+	lbl.TextTruncate = Enum.TextTruncate.AtEnd
 	lbl.Parent = topArea
 
 	-- พื้นหลังสวิตช์

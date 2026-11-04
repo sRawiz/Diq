@@ -72,17 +72,23 @@ function ControlCenter.new(options)
 		self.Controls[id] = { Label = label, Tab = tab, Widget = widget, Spec = spec }
 		table.insert(self.Order, id)
 	end
-	function self:TrackTab(tab, prefix)
+	function self:TrackTab(tab, prefix, rootTab)
+		rootTab = rootTab or tab
 		-- IDs are schema-v1 identifiers derived from the shipped English labels.
 		-- Renaming labels requires an explicit profile migration, not silent remapping.
 		local toggle, slider, dropdown, textInput = tab.CreateToggle, tab.CreateSlider, tab.CreateDropdown, tab.CreateInput
+		local createSection = tab.CreateSection
+		local owner = self
+		function tab:CreateSection(...)
+			return owner:TrackTab(createSection(self, ...), prefix, rootTab)
+		end
 		function tab:CreateToggle(label, default, callback, config)
 			config = table.clone(config or {})
 			local key = config.Keybind and config.Keybind.Default.Name or "None"
 			config.Keybind = nil -- owned by the central dispatcher
 			local widget = toggle(self, label, default, callback, config)
 			local id = prefix .. "." .. slug(label)
-			register(id, label, self, widget, { Kind = "boolean", Default = default == true }, callback)
+			register(id, label, rootTab, widget, { Kind = "boolean", Default = default == true }, callback)
 			if activeIds[id] then
 				if id == "aim.aim_assist" then key = "Q" end
 				local owner = self._controlCenter
@@ -91,23 +97,23 @@ function ControlCenter.new(options)
 			end
 			if config.Slider then
 				local s = config.Slider
-				register(id .. ".value", s.Text, self, widget, { Kind = "number", Default = s.Default, Min = s.Min, Max = s.Max }, s.Callback, true)
+				register(id .. ".value", s.Text, rootTab, widget, { Kind = "number", Default = s.Default, Min = s.Min, Max = s.Max }, s.Callback, true)
 			end
 			return widget
 		end
 		function tab:CreateSlider(label, min, max, default, callback)
 			local widget = slider(self, label, min, max, default, callback)
-			register(prefix .. "." .. slug(label), label, self, widget, { Kind = "number", Default = default, Min = min, Max = max }, callback)
+			register(prefix .. "." .. slug(label), label, rootTab, widget, { Kind = "number", Default = default, Min = min, Max = max }, callback)
 			return widget
 		end
 		function tab:CreateDropdown(label, choices, default, callback)
 			local widget = dropdown(self, label, choices, default, callback)
-			register(prefix .. "." .. slug(label), label, self, widget, { Kind = "choice", Default = default, Options = table.clone(choices) }, callback)
+			register(prefix .. "." .. slug(label), label, rootTab, widget, { Kind = "choice", Default = default, Options = table.clone(choices) }, callback)
 			return widget
 		end
 		function tab:CreateInput(label, placeholder, callback)
 			local widget = textInput(self, label, placeholder, callback)
-			register(prefix .. "." .. slug(label), label, self, widget, { Kind = "string", Default = "", MaxLength = 128 }, callback)
+			register(prefix .. "." .. slug(label), label, rootTab, widget, { Kind = "string", Default = "", MaxLength = 128 }, callback)
 			return widget
 		end
 		tab._controlCenter = self
@@ -231,47 +237,51 @@ function ControlCenter.new(options)
 		return true
 	end
 	function self:Mount()
-		local profile = window:CreateTab("Profiles", "save")
-		profile:CreateLabel("Profiles are scoped to this place. Import applies saved feature states.", { Wrap = true })
-		local name = profile:CreateInput("Profile Name", "letters, digits, _ or -")
+		local profile = window:CreateTab("Profiles", "save", { Description = "Save a setup for this place, or bring one in from another session." })
+		local saved = profile:CreateSection("Saved profiles")
+		local name = saved:CreateInput("Profile Name", "letters, digits, _ or -")
 		name:Set("default")
-		local box = profile:CreateInput("Profile JSON", "Export here or paste a profile", nil, { Multiline = true })
-		profile:CreateButton("Export JSON", function() local text, err = self:ExportProfile(); if text then box:Set(text) else fail(err) end end)
-		profile:CreateButton("Copy JSON", function() local text, err = self:ExportProfile(); if text then box:Set(text); notice(self:Copy(text), "JSON is also available in the text box") else fail(err) end end)
-		profile:CreateButton("Import JSON", function() local ok, err = self:ApplyProfile(box:Get()); notice(ok, ok and "Profile applied" or err) end)
-		profile:CreateButton("Save Named Profile", function()
+		local storageActions = saved:CreateActionGroup({ Columns = 2, MinWidth = 150 })
+		local exchange = profile:CreateSection("Import & export")
+		exchange:CreateLabel("Import applies the saved feature states.", { Wrap = true })
+		local box = exchange:CreateInput("Profile JSON", "Export here or paste a profile", nil, { Multiline = true })
+		local jsonActions = exchange:CreateActionGroup({ Columns = 3, MinWidth = 110 })
+		jsonActions:CreateButton("Export JSON", function() local text, err = self:ExportProfile(); if text then box:Set(text) else fail(err) end end)
+		jsonActions:CreateButton("Copy JSON", function() local text, err = self:ExportProfile(); if text then box:Set(text); notice(self:Copy(text), "JSON is also available in the text box") else fail(err) end end)
+		jsonActions:CreateButton("Import JSON", function() local ok, err = self:ApplyProfile(box:Get()); notice(ok, ok and "Profile applied" or err) end)
+		storageActions:CreateButton("Save Named Profile", function()
 			local text, err = self:ExportProfile(); if not text then fail(err); return end
 			box:Set(text)
 			local ok, reason = self.Settings:Save(name:Get(), text)
 			self.Capabilities.WriteFile = ok and "Last save succeeded" or "Last save failed"
 			notice(ok, reason)
 		end)
-		profile:CreateButton("Load Named Profile", function()
+		storageActions:CreateButton("Load Named Profile", function()
 			local text, err = self.Settings:Read(name:Get())
 			self.Capabilities.ReadFile = text and "Last read succeeded" or "Last read failed"
 			if not text then fail(err); return end
 			box:Set(text); local ok, reason = self:ApplyProfile(text); notice(ok, ok and "Profile loaded" or reason)
 		end)
-		profile:CreateButton("Restore Defaults", function() local ok, err = self:Reset(); notice(ok, ok and "Defaults restored" or err) end)
-		local keys = window:CreateTab("Keybinds", "keyboard")
-		keys:CreateLabel("Click a key to change it. Escape cancels. Conflicting keys are rejected.", { Wrap = true })
+		profile:CreateButton("Restore Defaults", function() local ok, err = self:Reset(); notice(ok, ok and "Defaults restored" or err) end, { Variant = "Danger", Icon = "rotate-ccw" })
+		local keys = window:CreateTab("Keybinds", "keyboard", { Description = "Make it yours. Select a key to rebind; Escape cancels capture." })
 		local widgets = {}
 		for _, id in self.Keys.Order do
 			local entry = self.Keys.Entries[id]
 			local picker, mode
+			local keySection = keys:CreateSection(entry.Label)
 			local function changed(key, selectedMode)
 				local ok, err = self.Keys:Change(id, key, selectedMode)
 				if not ok then self.RefreshKeys(); fail(err) end
 			end
-			picker = keys:CreateKeybind(entry.Label, entry.Key == "None" and Enum.KeyCode.Unknown or Enum.KeyCode[entry.Key], nil, {
+			picker = keySection:CreateKeybind(entry.Label, entry.Key == "None" and Enum.KeyCode.Unknown or Enum.KeyCode[entry.Key], nil, {
 				OnListeningChanged = function(listening)
 					if listening then self.Keys:Release() end
 					modules.Aim.SetInputSuspended(listening)
 				end,
 				OnChanged = function(key) changed(key.Name, entry.Mode) end,
 			})
-			if entry.Set then mode = keys:CreateDropdown(entry.Label .. " Mode", { "Toggle", "Hold" }, entry.Mode, function(value) changed(entry.Key, value) end) end
-			keys:CreateButton("Unbind " .. entry.Label, function() changed("None", entry.Mode) end)
+			if entry.Set then mode = keySection:CreateDropdown(entry.Label .. " Mode", { "Toggle", "Hold" }, entry.Mode, function(value) changed(entry.Key, value) end) end
+			keySection:CreateButton("Unbind " .. entry.Label, function() changed("None", entry.Mode) end, { Variant = "Ghost" })
 			widgets[id] = { Key = picker, Mode = mode }
 		end
 		self.RefreshKeys = function()
@@ -283,21 +293,24 @@ function ControlCenter.new(options)
 			local key = self.Keys.Entries.window.Key
 			if key ~= "None" then window:SetToggleKey(Enum.KeyCode[key]) end
 		end
-		local performance = window:CreateTab("Performance", "activity")
-		self.PerformanceWidget = performance:CreateDropdown("Performance Preset", { "Low", "Balanced", "High" }, self.Performance, function(value) self:SetPerformance(value) end)
+		local performance = window:CreateTab("Performance", "activity", { Description = "Balance visual detail and update frequency for your device." })
+		local budgetSection = performance:CreateSection("Update budget")
+		self.PerformanceWidget = budgetSection:CreateDropdown("Performance Preset", { "Low", "Balanced", "High" }, self.Performance, function(value) self:SetPerformance(value) end)
 		self.Controls.performance = { Label = "Performance Preset", Tab = performance, Widget = self.PerformanceWidget, Spec = self.Settings.Entries.performance }
 		table.insert(self.Order, "performance")
-		performance:CreateLabel("Low: 20 updates/s, nearest 20 players, 500 studs; scan 4/s", { Wrap = true })
-		performance:CreateLabel("Balanced: 30 updates/s, nearest 50 players, 1500 studs; scan 10/s", { Wrap = true })
-		performance:CreateLabel("High: every frame, no extra visual cap; scan 10/s", { Wrap = true })
-		performance:CreateLabel("User ESP range still applies. Presets do not enable features.", { Wrap = true })
-		local diagnostics = window:CreateTab("Diagnostics", "activity")
-		local overview = diagnostics:CreateLabel("Refresh to inspect this session")
+		budgetSection:CreateLabel("Low: 20 updates/s, nearest 20 players, 500 studs; scan 4/s", { Wrap = true })
+		budgetSection:CreateLabel("Balanced: 30 updates/s, nearest 50 players, 1500 studs; scan 10/s", { Wrap = true })
+		budgetSection:CreateLabel("High: every frame, no extra visual cap; scan 10/s", { Wrap = true })
+		budgetSection:CreateLabel("User ESP range still applies. Presets do not enable features.", { Wrap = true })
+		local diagnostics = window:CreateTab("Diagnostics", "activity", { Description = "Inspect this session, check capabilities and measure frame times." })
+		local session = diagnostics:CreateSection("Session overview")
+		local overview = session:CreateLabel("Refresh to inspect this session")
 		local capabilityLabels = {}
 		for _, name in { "Drawing", "Clipboard", "ReadFile", "WriteFile", "MakeFolder", "MouseOutput" } do
-			capabilityLabels[name] = diagnostics:CreateLabel(name .. ": not checked", { Wrap = true })
+			capabilityLabels[name] = session:CreateLabel(name .. ": not checked", { Wrap = true })
 		end
-		local reportBox = diagnostics:CreateInput("Report", "Refresh to inspect this session", nil, { Multiline = true })
+		local report = diagnostics:CreateSection("Session report")
+		local reportBox = report:CreateInput("Report", "Refresh to inspect this session", nil, { Multiline = true })
 		self.RefreshDiagnostics = function()
 			if self.Destroyed then return end
 			local failures, active = 0, 0
@@ -309,32 +322,38 @@ function ControlCenter.new(options)
 			local ok, text = pcall(function() return self:Report() end)
 			if ok then reportBox:Set(text) else fail("Could not encode diagnostics") end
 		end
-		diagnostics:CreateLabel("Present does not mean tested. Reports contain no account IDs or script source.", { Wrap = true })
-		diagnostics:CreateButton("Refresh Report", self.RefreshDiagnostics)
-		diagnostics:CreateButton("Copy Report", function() self.RefreshDiagnostics(); notice(self:Copy(reportBox:Get()), "Report is also available in the text box") end)
-		diagnostics:CreateButton("Test Invisible Drawing", function() local ok = self:ProbeDrawing(); self.RefreshDiagnostics(); notice(ok, self.Capabilities.Drawing) end)
-		diagnostics:CreateButton("Sample Frame Times (10 seconds)", function() notice(self:SampleFrames(), "Keep this window focused and the scene unchanged during the sample") end)
-		local quick = window:CreateTab("Quick Actions", "search")
+		report:CreateLabel("Present does not mean tested. Reports contain no account IDs or script source.", { Wrap = true })
+		local reportActions = report:CreateActionGroup({ Columns = 2, MinWidth = 130 })
+		reportActions:CreateButton("Refresh Report", self.RefreshDiagnostics, { Icon = "refresh-cw" })
+		reportActions:CreateButton("Copy Report", function() self.RefreshDiagnostics(); notice(self:Copy(reportBox:Get()), "Report is also available in the text box") end)
+		local probes = diagnostics:CreateActionGroup({ Cards = true, MinWidth = 240 })
+		probes:CreateButton("Test Invisible Drawing", function() local ok = self:ProbeDrawing(); self.RefreshDiagnostics(); notice(ok, self.Capabilities.Drawing) end, { Icon = "pen-tool", Description = "Check whether drawing is available in this session." })
+		probes:CreateButton("Sample Frame Times (10 seconds)", function() notice(self:SampleFrames(), "Keep this window focused and the scene unchanged during the sample") end, { Icon = "activity", Description = "Measure ten seconds with the scene unchanged." })
+		local quick = window:CreateTab("Quick Actions", "search", { Order = -10, Description = "What would you like to do? Jump to a setting or manage your session." })
 		self.QuickTab = quick
-		quick:CreateButton("Stop All Features", function() self:StopAll() end)
-		quick:CreateButton("Open Profiles", function() window:SelectTab(profile) end)
-		quick:CreateButton("Open Diagnostics", function() window:SelectTab(diagnostics); self.RefreshDiagnostics() end)
+		local destinations = quick:CreateActionGroup({ Cards = true })
+		destinations:CreateButton("Open Profiles", function() window:SelectTab(profile) end, { Icon = "save", Description = "Keep your favorite setup ready for next time." })
+		destinations:CreateButton("Open Diagnostics", function() window:SelectTab(diagnostics); self.RefreshDiagnostics() end, { Icon = "activity", Description = "Check your session and measure performance." })
+		local finder = quick:CreateSection("Find a setting")
 		local choices, lookup, selected = {}, {}, nil
 		for _, id in self.Order do local label = self.Controls[id].Label .. " [" .. id .. "]"; table.insert(choices, label); lookup[label] = id end
 		local results
-		quick:CreateInput("Find Setting", "Search by name, then leave this field", function(query)
+		finder:CreateInput("Find Setting", "Search by name, then leave this field", function(query)
 			local filtered = {}; query = query:lower()
 			for _, label in choices do if label:lower():find(query, 1, true) then table.insert(filtered, label) end end
 			results:SetOptions(filtered); selected = filtered[1]; results:Set(selected or "No matches", true)
 		end)
 		selected = choices[1]
-		results = quick:CreateDropdown("Results", choices, selected, function(value) selected = value end)
-		quick:CreateButton("Open Selected Setting", function() local item = self.Controls[lookup[selected]]; if item then window:SelectTab(item.Tab) end end)
-		quick:CreateButton("Toggle Selected Setting", function()
+		results = finder:CreateDropdown("Results", choices, selected, function(value) selected = value end)
+		local selectionActions = finder:CreateActionGroup({ Columns = 2, MinWidth = 180 })
+		selectionActions:CreateButton("Open Selected Setting", function() local item = self.Controls[lookup[selected]]; if item then window:SelectTab(item.Tab) end end, { Variant = "Primary", Icon = "arrow-up-right" })
+		selectionActions:CreateButton("Toggle Selected Setting", function()
 			local id = lookup[selected]; local item = id and self.Controls[id]
 			if not item or item.Spec.Kind ~= "boolean" then notice(false, "Choose a toggle or open its settings page"); return end
 			local ok, reason = self.Settings:Apply({ [id] = not item.Spec.Get() }); if not ok then fail(reason) end
 		end)
+		quick:CreateButton("Stop All Features", function() self:StopAll() end, { Variant = "Danger", Icon = "square" })
+		window:SelectTab(quick)
 	end
 	function self:Destroy()
 		if self.Destroyed then return end

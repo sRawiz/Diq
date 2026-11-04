@@ -23,7 +23,27 @@
 | การ์ด | `ui/blocks/ProfileCard.lua` | แสดงโปรไฟล์ ชื่อเกม และเวลา session พร้อมงานที่ยกเลิกได้ |
 | แจ้งเตือน | `ui/overlays/Notification.lua` | GUI และ timer ของ notifications |
 
-หน้าตาและค่าเริ่มต้นยังอิงของเดิม การ refactor นี้ไม่ได้เพิ่มระบบ reactive rendering
+หน้าตาเป็น workspace โทนเทาเข้ม: sidebar ย่อได้ หัวข้อของแต่ละหน้า และกลุ่ม controls
+ค่าเริ่มต้นขนาดหน้าต่าง 92% × 88% ของพื้นที่หน้าจอ จำกัดที่ 920 × 660 px;
+ส่ง `config.Size` เพื่อใช้ขนาดเดิมที่ caller กำหนดเองได้ เมื่อกว้างน้อยกว่า 680 px
+sidebar จะย่อเป็น icon rail โดยอัตโนมัติ พร้อมชื่อแท็บเมื่อ hover
+หน้าแรกเป็น Quick Actions; การย้าย controls เข้า section ไม่เปลี่ยน profile IDs หรือปุ่มลัด
+
+`window:CreateTab(name, icon, { Description = "...", Order = -10 })` เพิ่มคำอธิบายหน้า
+และเรียง navigation ได้ argument ตัวที่สามไม่บังคับ รูปแบบเดิมยังใช้งานได้
+`CreateButton` ใช้ความกว้างตามข้อความตามค่าเริ่มต้นและไม่ย่อขนาดปุ่มตอนกด
+เพิ่ม config `Variant = "Primary" | "Secondary" | "Ghost" | "Danger"`
+เพื่อแยกลำดับความสำคัญของคำสั่ง
+
+ใช้ `tab:CreateActionGroup({ Cards = true, Columns = 2, MinWidth = 210 })`
+แล้วเรียก `group:CreateButton(text, callback, { Icon = "...", Description = "..." })`
+เพื่อสร้างการ์ดคำสั่ง มี icon, ชื่อ และคำอธิบาย; กลุ่มจะเปลี่ยนเป็นคอลัมน์เดียวเมื่อแคบ
+ถ้าไม่ส่ง `Cards = true` จะได้แถวปุ่มสูง 38 px สำหรับคำสั่งรอง
+grid เป็นเจ้าของขนาดปุ่ม และคำนวณความสูงจาก `AbsoluteContentSize`
+ใช้ ActionGroup สำหรับปุ่มเท่านั้น; controls ที่มีค่าให้ใส่ใน Section
+การ Destroy กลุ่มต้องยกเลิก callback และ connection ของทุกปุ่มด้วย
+
+การเปลี่ยนหน้าตานี้ไม่ได้เพิ่มระบบ reactive rendering
 `SetTheme` ยังคงแก้ตารางสีที่การสร้าง/อัปเดตครั้งถัดไปอ่าน ไม่ repaint ทุก instance ทันที
 Tokens เป็นค่าร่วมแบบอ่านอย่างเดียวตอน runtime; แก้ source แล้ว build เมื่อต้องการเปลี่ยน
 ค่าระยะเฉพาะ component ยังอยู่ในไฟล์ component เพื่อไม่ทำให้รูปแบบที่ต่างกันผูกกันทั้งหมด

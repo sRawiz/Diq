@@ -33,6 +33,7 @@ return function(ctx, text, default, callback, options)
 	lbl.Font = Tokens.Font.Label
 	lbl.TextSize = Tokens.Text.Body
 	lbl.TextXAlignment = Enum.TextXAlignment.Left
+	lbl.TextTruncate = Enum.TextTruncate.AtEnd
 	lbl.Parent = frame
 
 	local keyBtn = Instance.new("TextButton")

@@ -237,9 +237,8 @@ local function Start()
 	-- ==========================================
 	-- 🏃 Tab: Movement (ใช้ Lucide icon "move")
 	-- ==========================================
-	local movementTab = Controls:TrackTab(MyWindow:CreateTab("Movement", "move"), "movement")
-
-	movementTab:CreateLabel("MOVEMENT SETTINGS")
+	local movementPage = Controls:TrackTab(MyWindow:CreateTab("Movement", "move", { Description = "Move your way. Tune speed, flight and character controls." }), "movement")
+	local movementTab = movementPage:CreateSection("Movement controls")
 
 	local flyToggle
 	flyToggle = movementTab:CreateToggle("CFrame Fly", false, function(state)
@@ -330,13 +329,14 @@ local function Start()
 		jumpToggle:Set(state.IsInfinityJump, true)
 	end)
 
-	movementTab:CreateLabel("ACTIONS")
+	movementPage:CreateLabel("CHARACTER ACTIONS")
+	local characterActions = movementPage:CreateActionGroup({ Columns = 2, MinWidth = 150 })
 
-	movementTab:CreateButton("Reset Character", function()
+	characterActions:CreateButton("Reset Character", function()
 		Movement.ResetCharacter()
 	end, { Icon = "skull" })
 
-	movementTab:CreateButton("Unanchor", function()
+	characterActions:CreateButton("Unanchor", function()
 		Movement.Unanchor()
 		DiqUI:Notify("Success", "Character unanchored", 2, "success")
 	end, { Icon = "shield" })
@@ -344,9 +344,8 @@ local function Start()
 	-- ==========================================
 	-- 🎯 Tab: Combat (ใช้ Lucide icon "crosshair")
 	-- ==========================================
-	local aimTab = Controls:TrackTab(MyWindow:CreateTab("Aim Assist", "crosshair"), "aim")
-
-	aimTab:CreateLabel("AIM ASSIST")
+	local aimPage = Controls:TrackTab(MyWindow:CreateTab("Aim Assist", "crosshair", { Description = "Adjust targeting and the field of view. Shortcuts live in Keybinds." }), "aim")
+	local aimTab = aimPage:CreateSection("Targeting")
 	Aimbot.ApplyAssistPreset()
 	local aimAssistToggle = aimTab:CreateToggle("Aim Assist", false, function(enabled)
 		Aimbot.SetEnabled(enabled)
@@ -363,10 +362,10 @@ local function Start()
 	aimTab:CreateToggle("Show FOV", true, function(visible)
 		Aimbot.SetShowFOV(visible)
 	end, { Icon = "circle" })
-	aimTab:CreateLabel("Shortcuts and Hold / Toggle modes are in Keybinds")
+	aimPage:CreateLabel("Shortcuts and Hold / Toggle modes are in Keybinds", { Wrap = true })
 
-	local combatTab = Controls:TrackTab(MyWindow:CreateTab("Combat", "shield"), "combat")
-	combatTab:CreateLabel("HITBOX EXPANDER")
+	local combatPage = Controls:TrackTab(MyWindow:CreateTab("Combat", "shield", { Description = "Configure hitboxes and choose which targets are included." }), "combat")
+	local combatTab = combatPage:CreateSection("Hitbox configuration")
 
 	combatTab:CreateToggle("Enable Hitbox Expander", false, function(state)
 		Hitbox.SetEnabled(state)
@@ -388,7 +387,7 @@ local function Start()
 		Hitbox.SetTargetPart(selected)
 	end)
 
-	combatTab:CreateLabel("CHECKS")
+	combatTab = combatPage:CreateSection("Target checks")
 
 	combatTab:CreateToggle("Hitbox Team Check", true, function(state)
 		Hitbox.SetTeamCheck(state)
@@ -399,15 +398,14 @@ local function Start()
 	-- ==========================================
 	-- 👁️ Tab: Visuals (ใช้ Lucide icon "eye")
 	-- ==========================================
-	local visualTab = Controls:TrackTab(MyWindow:CreateTab("Visuals", "eye"), "visual")
-
-	visualTab:CreateLabel("ESP MASTER")
+	local visualPage = Controls:TrackTab(MyWindow:CreateTab("Visuals", "eye", { Description = "Choose what to see, who to highlight and how the world looks." }), "visual")
+	local visualTab = visualPage:CreateSection("Overlay")
 
 	visualTab:CreateToggle("Enable ESP", false, function(state)
 		ESP.SetEnabled(state)
 	end, { Icon = "eye" })
 
-	visualTab:CreateLabel("ESP ELEMENTS")
+	visualTab = visualPage:CreateSection("Visible elements")
 
 	visualTab:CreateToggle("Show Highlights", true, function(state)
 		ESP.SetHighlights(state)
@@ -429,7 +427,7 @@ local function Start()
 		ESP.SetTracers(state)
 	end, { Icon = "git-commit" })
 
-	visualTab:CreateLabel("ESP TEAMS")
+	visualTab = visualPage:CreateSection("Teams & colors")
 	visualTab:CreateToggle("Show Teammates", true, function(state)
 		ESP.SetRelationVisible("Teammate", state)
 	end, { Icon = "users" })
@@ -463,7 +461,7 @@ local function Start()
 		ESP.SetTeamAttribute(value:match("^%s*(.-)%s*$"))
 	end)
 
-	visualTab:CreateLabel("WORLD VISUALS")
+	visualTab = visualPage:CreateSection("World lighting")
 
 	visualTab:CreateToggle("Fullbright & No Fog", false, function(state)
 		Misc.SetFullbright(state)
@@ -478,9 +476,7 @@ local function Start()
 	-- ==========================================
 	-- ⚙️ Tab: Settings (ใช้ Lucide icon "settings")
 	-- ==========================================
-	local settingsTab = Controls:TrackTab(MyWindow:CreateTab("Settings", "settings"), "settings")
-
-	settingsTab:CreateLabel("PROFILE")
+	local settingsTab = Controls:TrackTab(MyWindow:CreateTab("Settings", "settings", { Description = "Your session, server connections and workspace preferences." }), "settings")
 
 	-- Get Executor Name
 	local executorName = "Unknown"
@@ -496,12 +492,12 @@ local function Start()
 		game:GetService("Players").LocalPlayer.UserId
 	)
 
-	settingsTab:CreateLabel("Manage all shortcuts in Keybinds. End stops all features.")
+	settingsTab:CreateLabel("Manage shortcuts in Keybinds. End stops all features.", { Wrap = true })
 
-	settingsTab:CreateLabel("UTILITY")
+	local utility = settingsTab:CreateSection("Session preferences")
 
 	local antiAfkToggle
-	antiAfkToggle = settingsTab:CreateToggle("Anti-AFK (Prevent Idle Kick)", false, function(state)
+	antiAfkToggle = utility:CreateToggle("Anti-AFK (Prevent Idle Kick)", false, function(state)
 		local ok, reason = Misc.SetAntiAFK(state)
 		if not ok then
 			antiAfkToggle:Set(false, true)
@@ -510,44 +506,46 @@ local function Start()
 	end, { Icon = "coffee" })
 	Misc.SetStateListener(function(state) antiAfkToggle:Set(state.IsAntiAFK, true) end)
 
-	settingsTab:CreateLabel("SERVER MANAGEMENT")
+	settingsTab:CreateLabel("SERVER CONNECTIONS")
+	local serverCards = settingsTab:CreateActionGroup({ Cards = true })
 	Misc.SetServerListener(function(phase, message)
 		if not App.Destroyed then
 			DiqUI:Notify("Server", message, phase == "Failed" and 6 or 3, phase == "Failed" and "warning" or "info")
 		end
 	end)
-	settingsTab:CreateButton("Find Best Server (Roblox)", function()
+	serverCards:CreateButton("Find Best Server (Roblox)", function()
 		local ok, reason = Misc.FindBestServer()
 		if not ok and reason then DiqUI:Notify("Server", reason, 3, "warning") end
-	end, { Icon = "globe" })
-	settingsTab:CreateLabel("Roblox considers location and latency. May return to this server; lowest ping is not guaranteed.", { Wrap = true })
-	settingsTab:CreateButton("Find New Server", function()
+	end, { Icon = "globe", Description = "Let Roblox match your connection. May return to this server." })
+	serverCards:CreateButton("Find New Server", function()
 		local ok, reason = Misc.ServerHop()
 		if not ok then DiqUI:Notify("Server", reason, 3, "warning") end
-	end, { Icon = "search" })
-	settingsTab:CreateButton("Cancel Server Search", function()
+	end, { Icon = "search", Description = "Find another public server with room to join." })
+	settingsTab:CreateLabel("Best Server considers location and latency; lowest ping is not guaranteed.", { Wrap = true })
+	local serverActions = settingsTab:CreateActionGroup({ Columns = 2, MinWidth = 150 })
+	serverActions:CreateButton("Cancel Server Search", function()
 		if not Misc.CancelServerSearch() then
 			DiqUI:Notify("Server", "No active search. A teleport already sent to Roblox cannot be cancelled here.", 3, "info")
 		end
-	end, { Icon = "x" })
+	end, { Icon = "x", Variant = "Ghost" })
 
-	settingsTab:CreateButton("Rejoin Server", function()
+	serverActions:CreateButton("Rejoin Server", function()
 		local ok, reason = Misc.Rejoin()
 		if not ok and reason then DiqUI:Notify("Server", reason, 3, "warning") end
 	end, { Icon = "rotate-cw" })
 
-	settingsTab:CreateLabel("DANGER ZONE")
+	settingsTab:CreateLabel("WORKSPACE")
+	local workspaceActions = settingsTab:CreateActionGroup({ Columns = 2, MinWidth = 150 })
 
-	settingsTab:CreateButton("Reset All Settings", function()
+	workspaceActions:CreateButton("Reset All Settings", function()
 		local reset, reason = Controls:Reset()
 		DiqUI:Notify(reset and "Reset Complete" or "Reset failed", reset and "All settings restored to defaults" or reason, 3, reset and "success" or "warning")
-	end, { Icon = "rotate-ccw" })
+	end, { Icon = "rotate-ccw", Variant = "Danger" })
 
-	settingsTab:CreateLabel("ABOUT")
 
-	settingsTab:CreateButton("About Diq Panel", function()
+	workspaceActions:CreateButton("About Diq Panel", function()
 		DiqUI:Notify("Diq UI Library", "Version 3.0 — by sRawiz\nRefactored Edition", 3, "info")
-	end, { Icon = "info" })
+	end, { Icon = "info", Variant = "Ghost" })
 
 	-- ==========================================
 	-- ✅ แจ้งเตือนว่าโหลดสำเร็จ

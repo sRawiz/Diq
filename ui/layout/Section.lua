@@ -13,21 +13,23 @@ return function(ctx, title)
 	local sectionFrame = Instance.new("Frame")
 	sectionFrame.Size = UDim2.new(1, 0, 0, 0)
 	sectionFrame.BackgroundColor3 = Theme.ElementBg
-	sectionFrame.ClipsDescendants = true
+	sectionFrame.Name = "SettingsSection"
+	sectionFrame.BorderSizePixel = 0
+	sectionFrame.ClipsDescendants = false
 	sectionFrame.Parent = targetParent
-	ApplyCorner(sectionFrame, 8)
+	ApplyCorner(sectionFrame, 14)
 	ApplyStroke(sectionFrame, Theme.Outline)
 
 	local sectionLayout = Instance.new("UIListLayout")
 	sectionLayout.Padding = UDim.new(0, 0)
-	sectionLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	sectionLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
 	sectionLayout.SortOrder = Enum.SortOrder.LayoutOrder
 	sectionLayout.Parent = sectionFrame
+	ctx.Primitives.ApplyPadding(sectionFrame, 8, 10, 8, 8)
 
 	local titleContainer = Instance.new("Frame")
-	titleContainer.Size = UDim2.new(1, 0, 0, 30)
-	titleContainer.BackgroundColor3 = Theme.HoverBg
-	titleContainer.BackgroundTransparency = 0.5
+	titleContainer.Size = UDim2.new(1, 0, 0, 38)
+	titleContainer.BackgroundTransparency = 1
 	titleContainer.BorderSizePixel = 0
 	titleContainer.Parent = sectionFrame
 
@@ -36,14 +38,14 @@ return function(ctx, title)
 	titleLbl.Position = UDim2.new(0, 12, 0, 0)
 	titleLbl.BackgroundTransparency = 1
 	titleLbl.Text = title
-	titleLbl.TextColor3 = Theme.Accent
+	titleLbl.TextColor3 = Theme.Text
 	titleLbl.Font = Tokens.Font.Strong
 	titleLbl.TextSize = Tokens.Text.Small
 	titleLbl.TextXAlignment = Enum.TextXAlignment.Left
 	titleLbl.Parent = titleContainer
 
 	connections:Track(sectionLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-		sectionFrame.Size = UDim2.new(1, 0, 0, sectionLayout.AbsoluteContentSize.Y)
+		sectionFrame.Size = UDim2.new(1, 0, 0, sectionLayout.AbsoluteContentSize.Y + 18)
 	end))
 
 	Section._tracker = connections

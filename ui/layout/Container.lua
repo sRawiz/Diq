@@ -3,6 +3,7 @@ local constructors = {
 	CreateLabel = import("components/Label"),
 	CreateProfileCard = import("blocks/ProfileCard"),
 	CreateSection = import("layout/Section"),
+	CreateActionGroup = import("layout/ActionGroup"),
 	CreateButton = import("components/Button"),
 	CreateToggle = import("blocks/SettingRow"),
 	CreateSlider = import("components/Slider"),
@@ -17,6 +18,7 @@ local function bind(container, base)
 			assert(self._tracker.Alive, "Cannot add controls to a destroyed container")
 			local ctx = table.clone(base)
 			ctx.Parent, ctx.Scope, ctx.Section = self._content, self._tracker, self
+			ctx.ActionGroup = self._actionGroup
 			ctx.BindContainer = function(section) bind(section, base) end
 			return constructor(ctx, ...)
 		end

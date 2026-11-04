@@ -21,8 +21,7 @@ return function(ctx, text, options, default, callback)
 	frame.ClipsDescendants = false
 	frame.ZIndex = 5
 	frame.Parent = targetParent
-	ApplyCorner(frame, Tokens.Radius.Control)
-	ApplyStroke(frame, Theme.Outline)
+	ctx.Primitives.ApplySectionStyle(frame, ctx.Section)
 
 	local lbl = Instance.new("TextLabel")
 	lbl.Size = UDim2.new(0.5, -10, 1, 0)
@@ -33,6 +32,7 @@ return function(ctx, text, options, default, callback)
 	lbl.Font = Tokens.Font.Label
 	lbl.TextSize = Tokens.Text.Body
 	lbl.TextXAlignment = Enum.TextXAlignment.Left
+	lbl.TextTruncate = Enum.TextTruncate.AtEnd
 	lbl.ZIndex = 5
 	lbl.Parent = frame
 
@@ -56,6 +56,7 @@ return function(ctx, text, options, default, callback)
 	selText.Font = Tokens.Font.Label
 	selText.TextSize = Tokens.Text.Small
 	selText.TextXAlignment = Enum.TextXAlignment.Left
+	selText.TextTruncate = Enum.TextTruncate.AtEnd
 	selText.ZIndex = 5
 	selText.Parent = selBtn
 
