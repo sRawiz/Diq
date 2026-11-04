@@ -134,6 +134,7 @@ function ControlCenter.new(options)
 		runtime.Scope:Remove("Actions")
 		app.Actions = runtime.Scope:Add(runtime:CreateScope(), "Actions")
 		if self.CancelSample then self.CancelSample() end
+		if modules.Misc.CancelServerSearch then modules.Misc.CancelServerSearch() end
 		local success = true
 		for _, id in self.Settings.Order do
 			local entry = self.Settings.Entries[id]

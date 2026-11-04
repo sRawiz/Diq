@@ -50,6 +50,20 @@ check(#settings.Order >= 30 and #keys.Order == 13, "Feature settings and shortcu
 check(Input.InputBegan:Count() == 1, "Shared dispatcher keeps one engine InputBegan connection")
 local function press(key, processed) Input.InputBegan:Fire({UserInputType=Enum.UserInputType.Keyboard,KeyCode=Enum.KeyCode[key]},processed or false) end
 local function release(key) Input.InputEnded:Fire({UserInputType=Enum.UserInputType.Keyboard,KeyCode=Enum.KeyCode[key]}) end
+local serverDownloads = 0
+function game:HttpGet()
+	serverDownloads += 1
+	task.wait(60)
+	return "unused late response"
+end
+click("Find New Server")
+check(serverDownloads == 1 and not captured.MiscSystem.ServerHop(), "Find New Server button starts one guarded search")
+click("Cancel Server Search")
+check(not captured.MiscSystem.CancelServerSearch(), "Cancel button stops the active search")
+click("Find New Server")
+press("End"); release("End")
+check(not captured.MiscSystem.CancelServerSearch(), "Emergency stop cancels server discovery")
+game.HttpGet = nil
 press("Q"); check(captured.AimbotSystem.IsEnabled(), "Q enables aim once, no legacy double dispatch")
 press("Q"); check(captured.AimbotSystem.IsEnabled(), "Repeated InputBegan cannot toggle twice before release")
 release("Q"); press("Q"); release("Q"); check(not captured.AimbotSystem.IsEnabled(), "Second complete key press disables")

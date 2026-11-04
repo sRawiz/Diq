@@ -1,5 +1,35 @@
 # Diq verification
 
+## หาและย้ายเซิร์ฟเวอร์
+
+หน้า Settings > SERVER MANAGEMENT มี Find New Server สำหรับค้นหาแล้วเข้าร่วม
+public server ของ PlaceId เดิมที่ยังไม่เต็มและไม่ใช่ JobId ปัจจุบัน โดยไล่ได้สูงสุด 10 หน้า
+Cancel Server Search หรือปุ่ม End ยกเลิกช่วงค้นหาได้ ส่วน Rejoin Server ยังคงใช้สำหรับเข้าเซิร์ฟเดิม
+(เมื่ออยู่คนเดียว Roblox จะเลือกเซิร์ฟเวอร์ให้ตามพฤติกรรม Rejoin เดิม)
+การค้นหาและ Rejoin ใช้ล็อกร่วมกัน ป้องกันคำขอซ้อนกัน
+
+`MiscSystem.ServerHop()` คืน `true` เมื่อเริ่มค้นหา หรือ `false, reason` หากเริ่มไม่ได้
+`SetServerListener(callback)` รับ `(phase, message)` โดย phase เป็น Searching, Teleporting,
+Failed หรือ Cancelled; Teleporting หมายถึงกำลังส่งคำขอ ไม่ใช่ยืนยันว่าเข้าเซิร์ฟเวอร์สำเร็จ
+ค้นหาหมดเวลาที่ 30 วินาที และรอ teleport ได้ 45 วินาที หากล้มเหลวให้กดค้นหาใหม่
+เมื่อปิดแผงจะล้าง task และ connection และไม่ให้ HTTP response เก่าเริ่ม teleport ภายหลัง
+การยกเลิกไม่รับประกันว่าจะหยุด HTTP transport ที่ executor ส่งไปแล้ว
+หรือยกเลิก teleport ที่ส่งให้ Roblox ไปแล้วได้
+
+ใช้ `game:HttpGet` ของ executor เช่นเดียวกับ loader เดิม โดยตรวจ capability และรายงาน
+ข้อผิดพลาด download/JSON/teleport แยกกัน ไม่ใช้ proxy, cookie หรือโหลดโค้ดเพิ่มเติม
+อ้างอิง [Games API](https://create.roblox.com/docs/cloud/reference/domains/games)
+และ [TeleportService](https://create.roblox.com/docs/reference/engine/classes/TeleportService)
+ใช้ client teleport API ตาม runtime ของโปรเจกต์นี้
+
+`run_infrastructure.py` รวม Misc suite: pagination, server filtering, malformed response,
+HTTP failure/timeout, teleport failure/timeout, duplicate actions, cancel และ cleanup
+ControlCenter suite ตรวจปุ่มค้นหา/ยกเลิกจริงและปุ่ม End ด้วย engine mocks
+ยังไม่ได้ทดสอบ HTTP หรือ teleport บน Roblox/executor จริง ต้องตรวจว่า JobId หลังย้ายเปลี่ยนไป
+และลองกดซ้ำ/ปิดแผงระหว่างค้นหา รวมถึงตรวจข้อความเมื่อ HTTP ถูกบล็อกหรือเซิร์ฟเวอร์เต็ม
+ใช้ `python tools/build.py` เพื่อสร้าง `dist/Diq.lua` จากไฟล์ในเครื่อง
+ถ้าใช้ remote loader ต้องนำ Main.lua, MiscSystem.lua และ ControlCenter.lua ขึ้นต้นทางด้วยกัน
+
 ## UI components
 
 แก้ซอร์สใน `ui/` แล้วใช้ `python tools/build.py` เพื่อสร้าง `DiqUILib.lua` และ bundle

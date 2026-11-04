@@ -212,7 +212,7 @@ end
 local TweenInfo={new=function(...) return {...} end}
 local RaycastParams={new=function() return {} end}
 local GuiService={MenuIsOpen=false,MenuOpened=signal(),GetGuiInset=function() return vec(0,0) end}
-local TeleportService={Teleport=function() end,TeleportToPlaceInstance=function() end}
+local TeleportService={TeleportInitFailed=signal(),Teleport=function() end,TeleportToPlaceInstance=function() end}
 local VirtualUser={CaptureController=function() end,ClickButton2=function() end}
 local services={Players=Players,RunService=RunService,UserInputService=Input,Lighting=Lighting,CoreGui=CoreGui,
  TweenService=TweenService,GuiService=GuiService,TeleportService=TeleportService,VirtualUser=VirtualUser,

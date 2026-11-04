@@ -204,7 +204,7 @@ local function Start()
 	local ESP = LoadModule("ESPSystem", { "Destroy", "Init", "SetBoxes", "SetEnabled", "SetHealth", "SetHighlights", "SetNames", "SetTracers", "SetUseTeamColor", "SetColorMode", "SetRelationVisible", "SetRelationColor", "SetShowRelation", "SetTeamAttribute", "SetMaxDistance", "SetPerformance", "IsEnabled" })
 	local Aimbot = LoadModule("AimbotSystem", { "Destroy", "Init", "ApplyAssistPreset", "SetEnabledListener", "SetEnabled", "SetAimPart", "SetFOVRadius", "SetShowFOV", "SetManagedInput", "SetScanInterval", "SetInputSuspended", "IsEnabled" })
 	local Hitbox = LoadModule("HitboxSystem", { "Destroy", "Init", "SetEnabled", "SetSize", "SetTargetPart", "SetTeamCheck", "SetTransparency", "IsEnabled" })
-	local Misc = LoadModule("MiscSystem", { "Destroy", "Rejoin", "SetAntiAFK", "SetFullbright", "IsAntiAFK", "IsFullbright", "SetStateListener" })
+	local Misc = LoadModule("MiscSystem", { "Destroy", "Rejoin", "ServerHop", "CancelServerSearch", "SetServerListener", "SetAntiAFK", "SetFullbright", "IsAntiAFK", "IsFullbright", "SetStateListener" })
 	local Preferences = LoadModule("Preferences", { "new" })
 	local Keybinds = LoadModule("Keybinds", { "new" })
 	local ControlCenter = LoadModule("ControlCenter", { "new" })
@@ -511,12 +511,24 @@ local function Start()
 	Misc.SetStateListener(function(state) antiAfkToggle:Set(state.IsAntiAFK, true) end)
 
 	settingsTab:CreateLabel("SERVER MANAGEMENT")
+	Misc.SetServerListener(function(phase, message)
+		if not App.Destroyed then
+			DiqUI:Notify("Server", message, phase == "Failed" and 6 or 3, phase == "Failed" and "warning" or "info")
+		end
+	end)
+	settingsTab:CreateButton("Find New Server", function()
+		local ok, reason = Misc.ServerHop()
+		if not ok then DiqUI:Notify("Server", reason, 3, "warning") end
+	end, { Icon = "search" })
+	settingsTab:CreateButton("Cancel Server Search", function()
+		if not Misc.CancelServerSearch() then
+			DiqUI:Notify("Server", "No active search. A teleport already sent to Roblox cannot be cancelled here.", 3, "info")
+		end
+	end, { Icon = "x" })
 
 	settingsTab:CreateButton("Rejoin Server", function()
-		DiqUI:Notify("Server", "Rejoining the current server...", 3, "info")
-		App.Actions:Delay(0.5, function()
-			if not App.Destroyed then Misc.Rejoin() end
-		end)
+		local ok, reason = Misc.Rejoin()
+		if not ok and reason then DiqUI:Notify("Server", reason, 3, "warning") end
 	end, { Icon = "rotate-cw" })
 
 	settingsTab:CreateLabel("DANGER ZONE")
