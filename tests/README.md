@@ -53,6 +53,13 @@ Components suite ตรวจ resize, การกดการ์ดไม่แ
 การนำทางกลับแท็บเจ้าของหลังย้าย controls เข้า section
 ยังต้องตรวจภาพจริงและ input บน Roblox/executor โดยเฉพาะจอเล็ก dropdown และการลากหน้าต่าง
 
+Window suite ตรวจ Minimize/restore แบบปุ่มด้านล่าง, shortcut, การเรียกคืนด้วย SelectTab,
+ขนาด/ตำแหน่งเดิมหลังลาก, สลับคำสั่งระหว่าง tween, hide/show ระหว่าง restore,
+การกดซ้ำและ Destroy ระหว่าง animation โดยไม่มี task/handler ค้าง
+ตรวจ layout units ระหว่าง UIScale เพื่อไม่ให้ card grid, section และ canvas ยุบตาม scale ซ้ำ
+mock tween จำลองการยกเลิกและ Completed state; ไม่จำลองการวาดภาพหรือทุกเฟรมระหว่าง tween
+ต้องตรวจ live ว่ามุมซ้ายบน/ล่างไม่มีพื้นหลังสี่เหลี่ยมทับขอบ และลองย่อ/คืน/กด K หลังลากหน้าต่าง
+
 แก้ซอร์สใน `ui/` แล้วใช้ `python tools/build.py` เพื่อสร้าง `DiqUILib.lua` และ bundle
 ดู [คู่มือ components](../docs/ui-components.md) สำหรับ API, ownership และการเพิ่ม controls
 `python tests/test_ui_build.py` ตรวจ dependency/cycle, deterministic output และ stale artifact

@@ -203,10 +203,23 @@ local Lighting=Instance.new("Lighting")
 Lighting.Ambient=Color3.new(0,0,0); Lighting.ColorShift_Bottom=Color3.new(0,0,0); Lighting.ColorShift_Top=Color3.new(0,0,0)
 Lighting.GlobalShadows=true; Lighting.FogEnd=1000; Lighting.Brightness=1
 local CoreGui=Instance.new("CoreGui")
-local TweenService={}
+local TweenService={created={}}
 function TweenService:Create(object,info,props)
-	local tween={Completed=signal()}
-	function tween:Play() for key,value in props do object[key]=value end; task.delay(0,function() self.Completed:Fire() end) end
+	local tween={Completed=signal(),PlaybackState=Enum.PlaybackState.Begin}
+	local pending
+	function tween:Play()
+		self.PlaybackState=Enum.PlaybackState.Playing
+		for key,value in props do object[key]=value end
+		pending=task.delay(0,function()
+			pending=nil; self.PlaybackState=Enum.PlaybackState.Completed; self.Completed:Fire(self.PlaybackState)
+		end)
+	end
+	function tween:Cancel()
+		if self.PlaybackState~=Enum.PlaybackState.Playing then return end
+		if pending then task.cancel(pending); pending=nil end
+		self.PlaybackState=Enum.PlaybackState.Cancelled; self.Completed:Fire(self.PlaybackState)
+	end
+	table.insert(self.created,tween)
 	return tween
 end
 local TweenInfo={new=function(...) return {...} end}

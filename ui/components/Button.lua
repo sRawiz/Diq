@@ -61,7 +61,7 @@ return function(ctx, text, callback, config)
 			return game:GetService("TextService"):GetTextSize(label.Text, label.TextSize, label.Font, Vector2.new(10000, 36))
 		end)
 		local width = (ok and bounds.X or #label.Text * 7) + left + 14
-		local available = ctx.Parent.AbsoluteSize.X
+		local available = ctx.Parent.AbsoluteSize.X / (ctx.GetScale and ctx.GetScale() or 1)
 		frame.Size = UDim2.fromOffset(math.min(width, math.max(80, available - 8)), 36)
 	end
 	resize()

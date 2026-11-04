@@ -118,7 +118,8 @@ return function(ctx, tabName, tabIcon, options)
 	ApplyPadding(content, Tokens.Spacing.ContentInset, Tokens.Spacing.ContentInset, 4, 4) -- Top, Bottom, Left, Right (เพิ่มพื้นที่ขอบบนล่างซ้ายขวา)
 
 	connections:Track(contentLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-		content.CanvasSize = UDim2.new(0, 0, 0, contentLayout.AbsoluteContentSize.Y + Tokens.Spacing.ContentInset * 2)
+		local scale = ctx.Controls.GetScale and ctx.Controls.GetScale() or 1
+		content.CanvasSize = UDim2.new(0, 0, 0, contentLayout.AbsoluteContentSize.Y / scale + Tokens.Spacing.ContentInset * 2)
 	end))
 	local heading = Instance.new("Frame")
 	heading.Name = "PageHeader"

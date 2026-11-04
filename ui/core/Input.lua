@@ -4,11 +4,12 @@ return function(Runtime)
 		return Runtime and Runtime.Input:Connect(name, callback) or UserInputService[name]:Connect(callback)
 	end
 
-	local function MakeDraggable(dragPart, mainFrame, tracker)
+	local function MakeDraggable(dragPart, mainFrame, tracker, canDrag)
 		local dragging = false
 		local dragStart, startPos
 
 		tracker:Track(dragPart.InputBegan:Connect(function(input)
+			if canDrag and not canDrag() then return end
 			if input.UserInputType == Enum.UserInputType.MouseButton1
 				or input.UserInputType == Enum.UserInputType.Touch then
 				dragging = true
@@ -25,6 +26,7 @@ return function(Runtime)
 		end))
 
 		tracker:Track(ConnectInput("InputChanged", function(input)
+			if canDrag and not canDrag() then dragging = false; return end
 			if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement
 				or input.UserInputType == Enum.UserInputType.Touch) then
 				local delta = input.Position - dragStart
@@ -34,6 +36,7 @@ return function(Runtime)
 				)
 			end
 		end))
+		return function() dragging = false end
 	end
 	local function CreateDrag(connections)
 		local activeDrag

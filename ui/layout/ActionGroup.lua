@@ -16,13 +16,14 @@ return function(ctx, options)
 	grid.Parent = frame
 	local height = options.Cards and 124 or 38
 	local function resize()
-		local columns = math.clamp(math.floor((frame.AbsoluteSize.X + 10) / ((options.MinWidth or 210) + 10)), 1, options.Columns or 2)
+		local width = frame.AbsoluteSize.X / (ctx.GetScale and ctx.GetScale() or 1)
+		local columns = math.clamp(math.floor((width + 10) / ((options.MinWidth or 210) + 10)), 1, options.Columns or 2)
 		grid.FillDirectionMaxCells = columns
 		grid.CellSize = UDim2.new(1 / columns, -10 * (columns - 1) / columns, 0, height)
 	end
 	scope:Track(frame:GetPropertyChangedSignal("AbsoluteSize"):Connect(resize))
 	scope:Track(grid:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-		frame.Size = UDim2.new(1, 0, 0, grid.AbsoluteContentSize.Y)
+		frame.Size = UDim2.new(1, 0, 0, grid.AbsoluteContentSize.Y / (ctx.GetScale and ctx.GetScale() or 1))
 	end))
 	resize()
 	local group = { _content = frame, _tracker = scope, _actionGroup = { Cards = options.Cards == true } }

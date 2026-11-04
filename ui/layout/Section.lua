@@ -45,7 +45,7 @@ return function(ctx, title)
 	titleLbl.Parent = titleContainer
 
 	connections:Track(sectionLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-		sectionFrame.Size = UDim2.new(1, 0, 0, sectionLayout.AbsoluteContentSize.Y + 18)
+		sectionFrame.Size = UDim2.new(1, 0, 0, sectionLayout.AbsoluteContentSize.Y / (ctx.GetScale and ctx.GetScale() or 1) + 18)
 	end))
 
 	Section._tracker = connections

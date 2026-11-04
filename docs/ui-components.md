@@ -29,6 +29,20 @@
 sidebar จะย่อเป็น icon rail โดยอัตโนมัติ พร้อมชื่อแท็บเมื่อ hover
 หน้าแรกเป็น Quick Actions; การย้าย controls เข้า section ไม่เปลี่ยน profile IDs หรือปุ่มลัด
 
+Minimize ย่อทั้งหน้าต่างด้วย UIScale ไปยังปุ่มเรียกคืนตรงกลางด้านล่างหน้าจอ
+กดปุ่มนั้น, ใช้ window shortcut (ค่าเริ่มต้น K) หรือ SelectTab เพื่อเรียกคืน
+รักษา Size, ตำแหน่งที่ลากไว้, แท็บ และสถานะ controls; การย่อไม่ปิดฟีเจอร์ที่กำลังทำงาน
+`Window:SetMinimized(boolean)` / `Window:IsMinimized()` ใช้ควบคุมสถานะนี้ได้
+`SetVisible(false)` ซ่อนทั้งหน้าต่างและปุ่มเรียกคืน ส่วน `Toggle()` จะเรียกคืนก่อนหากย่ออยู่
+animation ใช้ scope แยกและยกเลิก tween/Completed handlers เมื่อคำสั่งใหม่มาแทนหรือ Destroy
+`ctx.GetScale()` ช่วยแปลง AbsoluteSize/AbsoluteContentSize กลับเป็น layout units
+เพื่อไม่ให้ responsive breakpoint และความสูงเนื้อหาเปลี่ยนเพราะ animation
+
+ขอบหน้าต่างใช้รัศมีเดียวกันที่ shell และพื้นหลัง sidebar; TopBar โปร่งใส
+เพราะ [UICorner ไม่ clip descendants](https://create.roblox.com/docs/reference/engine/classes/UICorner)
+พื้นหลัง sidebar จึงวาดมุมล่างซ้ายของตัวเอง แล้วเติมเฉพาะขอบบน/ขวาที่อยู่ภายใน shell
+ไม่อาศัย ClipsDescendants เพื่อบังมุมโค้ง และไม่ต้อง render UI ลง CanvasGroup texture
+
 `window:CreateTab(name, icon, { Description = "...", Order = -10 })` เพิ่มคำอธิบายหน้า
 และเรียง navigation ได้ argument ตัวที่สามไม่บังคับ รูปแบบเดิมยังใช้งานได้
 `CreateButton` ใช้ความกว้างตามข้อความตามค่าเริ่มต้นและไม่ย่อขนาดปุ่มตอนกด
