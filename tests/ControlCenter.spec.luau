@@ -50,6 +50,26 @@ local function inputBox(text)
 	end
 	error("Missing text box")
 end
+
+-- Players page is wired to the real directory, camera controller and End shortcut.
+local directoryRow
+for _, object in instances do
+	if object.Name == "Player_" .. tostring(enemy.UserId) and object.Parent then directoryRow = object; break end
+end
+check(directoryRow ~= nil, "Players page contains another player's row")
+directoryRow.Activated:Fire()
+camera.CameraSubject, camera.CameraType = own.Character.Humanoid, Enum.CameraType.Custom
+click("Spectate")
+check(captured.PlayerSystem.GetSnapshot().SpectatingUserId == enemy.UserId and camera.CameraSubject == enemy.Character.Humanoid,
+	"Players row and Spectate action drive the real camera controller")
+click("Stop Spectating")
+check(not captured.PlayerSystem.GetSnapshot().SpectatingUserId and camera.CameraSubject == own.Character.Humanoid,
+	"Stop Spectating action restores own camera")
+click("Spectate")
+Input.InputBegan:Fire({KeyCode=Enum.KeyCode.End, UserInputType=Enum.UserInputType.Keyboard}, false)
+Input.InputEnded:Fire({KeyCode=Enum.KeyCode.End, UserInputType=Enum.UserInputType.Keyboard}, false)
+check(not captured.PlayerSystem.GetSnapshot().SpectatingUserId and camera.CameraSubject == own.Character.Humanoid,
+	"End emergency shortcut restores the camera too")
 check(#settings.Order >= 30 and #keys.Order == 13, "Feature settings and shortcuts registered centrally")
 check(Input.InputBegan:Count() == 1, "Shared dispatcher keeps one engine InputBegan connection")
 local function press(key, processed) Input.InputBegan:Fire({UserInputType=Enum.UserInputType.Keyboard,KeyCode=Enum.KeyCode[key]},processed or false) end
@@ -318,7 +338,80 @@ tools:SampleFrames(); app:Destroy(); advance(30); advance(0)
 check(released(lastTrack), "Closing the panel releases the active emote")
 check(liveConnections()==baseline, "Shutdown cancels samples, picker handlers and shared input")
 check(not tools:ApplyProfile(profile) and not tools:SetPerformance("Low"), "Closed control center rejects mutations")
-local second=assert(factories.Main({Factories=injected})); second:Destroy(); advance(20); advance(0)
+
+-- Rotation values stand in for CFrames to verify playback ownership and cleanup.
+local function rotation(value)
+	local frame = { Value = value }
+	frame.Rotation = frame
+	function frame:Inverse() return rotation(-self.Value) end
+	function frame:Lerp(other, alpha) return rotation(self.Value + (other.Value - self.Value) * alpha) end
+	return setmetatable(frame, { __mul = function(left, right) return rotation(left.Value + right.Value) end })
+end
+CFrame.Angles = function(x, y, z) return rotation(x + y + z) end
+local second = assert(factories.Main({Factories=injected}))
+local r6Shoulder = Instance.new("Motor6D")
+r6Shoulder.Name = "Right Shoulder"
+r6Shoulder.Part0, r6Shoulder.Part1 = character.HumanoidRootPart, character.Head
+r6Shoulder.C0, r6Shoulder.Transform = rotation(0), rotation(0.4)
+r6Shoulder.Parent = r6Shoulder.Part0
+humanoid.RigType = Enum.HumanoidRigType.R6
+click("Trolling")
+click("Jerk Off")
+RunService.PreSimulation:Fire(0.12)
+local firstPose = r6Shoulder.Transform
+RunService.PreSimulation:Fire(0.15)
+check(firstPose.Value ~= r6Shoulder.Transform.Value and RunService.PreSimulation:Count() == 1,
+	"The R6 gesture updates the shoulder over time")
+local animatorPose = rotation(0.7)
+r6Shoulder.Transform = animatorPose
+RunService.PreSimulation:Fire(0.15)
+click("Stop Animation")
+check(r6Shoulder.Transform == animatorPose and RunService.PreSimulation:Count() == 0,
+	"Stopping restores the latest underlying shoulder pose")
+
+local function constraint(name)
+	local joint = Instance.new("AnimationConstraint")
+	joint.Name = name
+	joint.IsKinematic = true
+	joint.Attachment0 = Instance.new("Attachment")
+	joint.Attachment0.CFrame = rotation(0)
+	joint.Attachment1 = Instance.new("Attachment")
+	joint.Transform = rotation(0)
+	joint.Parent = character.Head
+	return joint
+end
+local r15Shoulder, r15Elbow = constraint("RightShoulder"), constraint("RightElbow")
+local baseShoulder, baseElbow = r15Shoulder.Transform, r15Elbow.Transform
+humanoid.RigType = Enum.HumanoidRigType.R15
+click("Jerk Off")
+RunService.PreSimulation:Fire(0.12)
+check(r15Shoulder.Transform ~= baseShoulder and r15Elbow.Transform ~= baseElbow,
+	"The R15 gesture moves both upgraded joints")
+press("End"); release("End")
+check(r15Shoulder.Transform == baseShoulder and r15Elbow.Transform == baseElbow and RunService.PreSimulation:Count() == 0,
+	"End restores both R15 joints and disconnects the update")
+
+click("Jerk Off")
+RunService.PreSimulation:Fire(0.12)
+click("Wave")
+check(r15Shoulder.Transform == baseShoulder and r15Elbow.Transform == baseElbow and lastTrack.IsPlaying,
+	"Switching to a stock emote stops the gesture")
+click("Jerk Off")
+check(released(lastTrack), "Starting the gesture releases a stock emote")
+RunService.PreSimulation:Fire(0.12)
+own.CharacterRemoving:Fire(character)
+check(r15Shoulder.Transform == baseShoulder and r15Elbow.Transform == baseElbow and RunService.PreSimulation:Count() == 0,
+	"Character removal stops the gesture")
+own.CharacterAdded:Fire(character)
+r15Elbow.IsKinematic = false
+local gestureStarted, gestureFailure = captured.TrollingSystem.Play("Jerk Off")
+check(not gestureStarted and gestureFailure and RunService.PreSimulation:Count() == 0,
+	"Unsupported joints fail without leaving a scheduled update")
+r15Elbow.IsKinematic = true
+click("Jerk Off")
+RunService.PreSimulation:Fire(0.12)
+second:Destroy(); advance(20); advance(0)
+check(r15Shoulder.Transform == baseShoulder and r15Elbow.Transform == baseElbow, "Closing the panel restores the gesture's joints")
 check(liveConnections()==baseline, "Repeated Main lifecycle leaves no added handlers")
 check(#warnings==0, "No hidden callback failures in control-center scenarios")
 print("ControlCenter checks passed: "..checks)

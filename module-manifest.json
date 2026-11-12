@@ -10,6 +10,7 @@
     "HitboxSystem",
     "TrollingSystem",
     "MiscSystem",
+    "PlayerSystem",
     "Preferences",
     "Keybinds",
     "ControlCenter"

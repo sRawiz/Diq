@@ -148,7 +148,7 @@ local moduleLabels = {
 	Keybinds = "Loading shortcuts", ControlCenter = "Loading the control center",
 }
 local function LoadModule(name, methods, optional)
-	SetLoading(moduleLabels[name] or "Loading components", loadedModules / 12 * 0.7)
+	SetLoading(moduleLabels[name] or "Loading components", loadedModules / 13 * 0.7)
 	startupFailure = "A required component could not be loaded. Please try again."
 	local function fail(stage, err)
 		local message = "[Diq] " .. name .. " " .. stage .. " failed: " .. tostring(err)
@@ -207,6 +207,7 @@ local function Start()
 	local Trolling = LoadModule("TrollingSystem", { "Destroy", "GetAnimations", "Play", "Stop" })
 	local Misc = LoadModule("MiscSystem", { "Destroy", "Rejoin", "ServerHop", "FindBestServer", "CancelServerSearch", "SetServerListener", "SetAntiAFK", "SetFullbright", "IsAntiAFK", "IsFullbright", "SetStateListener" })
 	local Preferences = LoadModule("Preferences", { "new" })
+	local PlayerTools = LoadModule("PlayerSystem", { "Destroy", "Init", "GetSnapshot", "Select", "Spectate", "Stop", "SetListener" })
 	local Keybinds = LoadModule("Keybinds", { "new" })
 	local ControlCenter = LoadModule("ControlCenter", { "new" })
 
@@ -230,10 +231,33 @@ local function Start()
 	})
 	local Controls = ControlCenter.new({ App = App, Window = MyWindow, UI = DiqUI, Runtime = App.Runtime,
 		Preferences = Preferences, Keybinds = Keybinds,
-		Modules = { Movement = Movement, ESP = ESP, Aim = Aimbot, Hitbox = Hitbox, Trolling = Trolling, Misc = Misc },
+		Modules = { Movement = Movement, ESP = ESP, Aim = Aimbot, Hitbox = Hitbox, Trolling = Trolling, Misc = Misc, Players = PlayerTools },
 	})
 	App.Tools = Controls
 	table.insert(App.Modules, { Name = "ControlCenter", Module = Controls })
+
+	local playersPage = MyWindow:CreateTab("Players", "users", { Description = "Find someone in this server and follow their character with your camera." })
+	local directory = playersPage:CreatePlayerList(function(id) PlayerTools.Select(id) end)
+	local playerDetails = playersPage:CreateSection("Selected player")
+	local playerName = playerDetails:CreateLabel("Select a player above.", { Wrap = true })
+	local playerInfo = playerDetails:CreateLabel("Team and distance appear here.", { Wrap = true })
+	local playerActions = playerDetails:CreateActionGroup()
+	playerActions:CreateButton("Spectate", function()
+		local ok, reason = PlayerTools.Spectate()
+		if not ok then DiqUI:Notify("Spectate unavailable", reason, 4, "warning") end
+	end, { Icon = "eye", Variant = "Primary" })
+	playerActions:CreateButton("Stop Spectating", function() PlayerTools.Stop() end, { Icon = "corner-down-left" })
+	local playerStatus = playersPage:CreateLabel("", { Wrap = true })
+	playersPage:CreateLabel("Spectate changes only your camera. Movement still controls your character. Distant areas may not be loaded.", { Wrap = true })
+	PlayerTools.SetListener(function(snapshot)
+		if App.Destroyed then return end
+		directory:SetPlayers(snapshot.Players, snapshot.SelectedUserId)
+		local chosen
+		for _, entry in snapshot.Players do if entry.UserId == snapshot.SelectedUserId then chosen = entry; break end end
+		playerName:SetText(chosen and (chosen.DisplayName .. "  @" .. chosen.Name) or "Select a player above.")
+		playerInfo:SetText(chosen and (chosen.Team .. " · " .. (chosen.Distance and string.format("%.0f studs", chosen.Distance) or "Distance unavailable") .. " · " .. chosen.Status) or "Team and distance appear here.")
+		playerStatus:SetText(snapshot.Message)
+	end)
 
 	-- ==========================================
 	-- 🏃 Tab: Movement (ใช้ Lucide icon "move")
@@ -474,7 +498,7 @@ local function Start()
 		)
 	end, { Icon = "sun" })
 
-	local trollingPage = MyWindow:CreateTab("Trolling", "drama", { Description = "Play emotes on your character in R6 or R15." })
+	local trollingPage = MyWindow:CreateTab("Trolling", "drama", { Description = "Play emotes in R6 or R15. Jerk Off is visible only to you." })
 	local animationActions = trollingPage:CreateActionGroup({ Columns = 2, MinWidth = 140 })
 	local function showAnimationError(reason)
 		if not App.Destroyed then DiqUI:Notify("Animation unavailable", reason, 4, "warning") end

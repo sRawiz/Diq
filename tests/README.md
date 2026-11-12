@@ -187,6 +187,13 @@ The old advanced module methods remain available to existing callers, but their
 controls and the T shortcut are not part of the simple interface. Legacy camera
 mode still preserves its previous lock behavior unless ApplyAssistPreset is used.
 
+## Players directory and Spectate
+
+`Players.spec.luau` covers the directory service, camera ownership/restoration,
+target switching and disappearance, player identity, live search and UI cleanup.
+`ControlCenter.spec.luau` also checks Spectate/Stop buttons and the End shortcut.
+See [player tools](../docs/player-tools.md) for behavior and live acceptance checks.
+
 ## Live acceptance checks
 
 1. Start from a fresh loader run in your own map with another player.

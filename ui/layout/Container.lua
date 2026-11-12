@@ -2,6 +2,7 @@ local import = ...
 local constructors = {
 	CreateLabel = import("components/Label"),
 	CreateProfileCard = import("blocks/ProfileCard"),
+	CreatePlayerList = import("components/PlayerList"),
 	CreateSection = import("layout/Section"),
 	CreateActionGroup = import("layout/ActionGroup"),
 	CreateButton = import("components/Button"),

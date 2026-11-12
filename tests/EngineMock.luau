@@ -118,7 +118,15 @@ function methods:GetDescendants()
 	local function visit(object) for _,child in object.children do table.insert(result,child); visit(child) end end
 	visit(self); return result
 end
-function methods:FindFirstChild(name) for _,child in self.children do if child.Name==name then return child end end end
+function methods:FindFirstChild(name, recursive)
+	for _, child in self.children do if child.Name == name then return child end end
+	if recursive then
+		for _, child in self.children do
+			local match = child:FindFirstChild(name, true)
+			if match then return match end
+		end
+	end
+end
 function methods:WaitForChild(name) return assert(self:FindFirstChild(name),name) end
 function methods:FindFirstChildOfClass(class) for _,child in self.children do if child.ClassName==class then return child end end end
 function methods:IsA(class) return self.ClassName==class or (class=="BasePart" and self.ClassName=="Part") end

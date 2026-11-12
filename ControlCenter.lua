@@ -156,6 +156,7 @@ function ControlCenter.new(options)
 			function() modules.Hitbox.SetEnabled(false) end, function() modules.Misc.SetFullbright(false); modules.Misc.SetAntiAFK(false) end,
 		} do if not pcall(stop) then success = false end end
 		if modules.Trolling and not pcall(modules.Trolling.Stop) then success = false end
+		if modules.Players and not pcall(modules.Players.Stop) then success = false end
 		notice(success, success and "All features stopped; settings kept" or "Some cleanup failed; close the panel")
 		return success
 	end
