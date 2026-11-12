@@ -83,6 +83,40 @@ return function(ctx, text, options, default, callback)
 	dropLayout.SortOrder = Enum.SortOrder.LayoutOrder
 	dropLayout.Parent = dropList
 	ApplyPadding(dropList, 4, 4, 4, 4)
+	local narrow = false
+	local motion
+	local function stopMotion()
+		local previous = motion; motion = nil
+		if previous then previous:DisconnectAll() end
+	end
+	connections:Track(stopMotion)
+	local function listSize(height) return UDim2.new(narrow and 1 or 0.5, narrow and -24 or -10, 0, height) end
+	local function reflow()
+		stopMotion()
+		narrow = frame.AbsoluteSize.X / (ctx.GetScale and ctx.GetScale() or 1) < 360
+		frame.Size = UDim2.new(1, 0, 0, narrow and 66 or 36)
+		lbl.Size = narrow and UDim2.new(1, -24, 0, 24) or UDim2.new(0.5, -10, 1, 0)
+		selBtn.Size = narrow and UDim2.new(1, -24, 0, 26) or UDim2.new(0.5, -10, 0, 26)
+		selBtn.Position = narrow and UDim2.fromOffset(12, 30) or UDim2.new(0.5, 0, 0.5, -13)
+		dropList.Position = narrow and UDim2.new(0, 12, 1, 4) or UDim2.new(0.5, 0, 1, 4)
+		dropList.Size = listSize(isOpen and math.min(#options * 26 + 10, 140) or 0)
+		dropList.Visible = isOpen
+	end
+	connections:Track(frame:GetPropertyChangedSignal("AbsoluteSize"):Connect(reflow))
+	reflow()
+	local function setOpen(value)
+		stopMotion(); isOpen = value
+		if dropIcon then Tween(dropIcon, 0.2, { Rotation = isOpen and 180 or 0 }) end
+		if value then dropList.Visible = true end
+		local active = CreateConnectionTracker(connections)
+		motion = active
+		local tween = Tween(dropList, 0.2, { Size = listSize(value and math.min(#options * 26 + 10, 140) or 0) })
+		active:Track(function() tween:Cancel() end)
+		active:Once(tween.Completed, function()
+			if motion ~= active then return end
+			stopMotion(); dropList.Visible = isOpen
+		end)
+	end
 
 	local optionBtns = {}
 	local optionConnections
@@ -132,12 +166,7 @@ return function(ctx, text, options, default, callback)
 				end
 
 				-- ปิด dropdown
-				isOpen = false
-				if dropIcon then Tween(dropIcon, 0.2, { Rotation = 0 }) end
-				local tw = Tween(dropList, 0.2, { Size = UDim2.new(0.5, -10, 0, 0) })
-				connections:Once(tw.Completed, function()
-					dropList.Visible = false
-				end)
+				setOpen(false)
 
 				if callback then connections:Invoke(callback, selected) end
 			end))
@@ -150,17 +179,7 @@ return function(ctx, text, options, default, callback)
 
 	-- เปิด/ปิด dropdown
 	connections:Track(selBtn.MouseButton1Click:Connect(function()
-		isOpen = not isOpen
-		if dropIcon then Tween(dropIcon, 0.2, { Rotation = isOpen and 180 or 0 }) end
-
-		if isOpen then
-			dropList.Visible = true
-			local targetH = math.min(#options * 26 + 10, 140)
-			Tween(dropList, 0.2, { Size = UDim2.new(0.5, -10, 0, targetH) })
-		else
-			local tw = Tween(dropList, 0.2, { Size = UDim2.new(0.5, -10, 0, 0) })
-			connections:Once(tw.Completed, function() dropList.Visible = false end)
-		end
+		setOpen(not isOpen)
 	end))
 
 	function obj:Set(opt, silent)
@@ -176,7 +195,7 @@ return function(ctx, text, options, default, callback)
 	end
 	function obj:Get() return selected end
 	function obj:Reset() obj:Set(default or (options and options[1]) or "") end
-	function obj:SetOptions(newOpts) options = newOpts; BuildOptions() end
+	function obj:SetOptions(newOpts) options = newOpts; BuildOptions(); reflow() end
 	function obj:SetVisible(v) frame.Visible = v end
 	function obj:Destroy() frame:Destroy() end
 

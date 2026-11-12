@@ -74,6 +74,7 @@ return function(ctx, playerName, executorName, userId)
 	timeLbl.TextSize = Tokens.Text.Caption
 	timeLbl.TextXAlignment = Enum.TextXAlignment.Left
 	timeLbl.Parent = frame
+	for _, label in { nameLbl, execLbl, mapLbl, timeLbl } do label.TextTruncate = Enum.TextTruncate.AtEnd end
 
 	-- ดึงชื่อ Map แบบ Asynchronous
 	connections:Spawn(function()

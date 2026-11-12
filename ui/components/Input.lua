@@ -67,6 +67,17 @@ return function(ctx, text, placeholder, callback, options)
 	end
 	ApplyCorner(inputBox, Tokens.Radius.Input)
 	ApplyPadding(inputBox, 0, 0, 8, 8)
+	if not options.Multiline then
+		local function reflow()
+			local narrow = frame.AbsoluteSize.X / (ctx.GetScale and ctx.GetScale() or 1) < 360
+			frame.Size = UDim2.new(1, 0, 0, narrow and 66 or 36)
+			lbl.Size = narrow and UDim2.new(1, -24, 0, 24) or UDim2.new(0.4, -10, 1, 0)
+			inputBox.Size = narrow and UDim2.new(1, -24, 0, 26) or UDim2.new(0.6, -15, 0, 24)
+			inputBox.Position = narrow and UDim2.fromOffset(12, 30) or UDim2.new(0.4, 0, 0.5, -12)
+		end
+		connections:Track(frame:GetPropertyChangedSignal("AbsoluteSize"):Connect(reflow))
+		reflow()
+	end
 
 	local inputStroke = ApplyStroke(inputBox, Theme.Outline)
 

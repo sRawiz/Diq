@@ -2,6 +2,7 @@ local import = ...
 local Tokens = import("core/Tokens")
 local Lifecycle = import("core/Lifecycle")
 local CreateTab = import("layout/Tab")
+local CreateSizing = import("layout/WindowSizing")
 return function(ctx, config)
 	local Diq, Theme = ctx.UI, ctx.Theme
 	local Players, CoreGui = game:GetService("Players"), game:GetService("CoreGui")
@@ -28,6 +29,7 @@ return function(ctx, config)
 	local isVisible = true
 	local isMinimized = false
 	local transitioning = false
+	local sizing
 	Window._elements = {}
 	local controls = {
 		Theme = Theme, Primitives = ctx.Primitives, Input = ctx.Input, Capture = capture,
@@ -90,12 +92,6 @@ return function(ctx, config)
 	WindowScale.Scale = 1
 	WindowScale.Parent = MainFrame
 	controls.GetScale = function() return WindowScale.Scale end
-	if not config.Size then
-		local bounds = Instance.new("UISizeConstraint")
-		bounds.MaxSize = Vector2.new(920, 660)
-		bounds.Parent = MainFrame
-	end
-
 	MainFrame.Size = windowSize
 
 	-- ==========================================
@@ -107,9 +103,6 @@ return function(ctx, config)
 	TopBar.BackgroundTransparency = 1
 	TopBar.BorderSizePixel = 0
 	TopBar.Parent = MainFrame
-	local cancelWindowDrag = MakeDraggable(TopBar, MainFrame, connections, function()
-		return isVisible and not isMinimized and not transitioning
-	end)
 
 	local SidebarBtn = Instance.new("TextButton")
 	SidebarBtn.Name = "ToggleSidebar"
@@ -124,7 +117,9 @@ return function(ctx, config)
 
 	-- ชื่อหน้าต่าง
 	local TitleLabel = Instance.new("TextLabel")
-	TitleLabel.Size = UDim2.new(1, -136, 1, 0)
+	TitleLabel.Name = "WindowTitle"
+	TitleLabel.Active = true
+	TitleLabel.Size = UDim2.new(1, -168, 1, 0)
 	TitleLabel.Position = UDim2.new(0, 54, 0, 0)
 	TitleLabel.TextTruncate = Enum.TextTruncate.AtEnd
 	TitleLabel.BackgroundTransparency = 1
@@ -134,6 +129,11 @@ return function(ctx, config)
 	TitleLabel.TextSize = Tokens.Text.Title
 	TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
 	TitleLabel.Parent = TopBar
+	local cancelWindowDrag = MakeDraggable(TitleLabel, MainFrame, connections, function()
+		return isVisible and not isMinimized and not transitioning and not (sizing and (sizing.Maximized or sizing:IsResizing()))
+	end, function(position)
+		MainFrame.Position = sizing and sizing:Constrain(position) or position
+	end)
 
 	-- ==========================================
 	-- ปุ่ม Minimize
@@ -141,7 +141,7 @@ return function(ctx, config)
 	local MinBtn = Instance.new("TextButton")
 	MinBtn.Name = "Minimize"
 	MinBtn.Size = UDim2.new(0, 26, 0, 26)
-	MinBtn.Position = UDim2.new(1, -62, 0.5, -13)
+	MinBtn.Position = UDim2.new(1, -92, 0.5, -13)
 	MinBtn.BackgroundColor3 = Theme.ElementBg
 	MinBtn.Text = ""
 	MinBtn.AutoButtonColor = false
@@ -159,6 +159,21 @@ return function(ctx, config)
 		Tween(MinBtn, 0.2, { BackgroundColor3 = Theme.ElementBg })
 		if minIcon then Tween(minIcon, 0.2, { ImageColor3 = Theme.SubText }) end
 	end))
+	local MaxBtn = Instance.new("TextButton")
+	MaxBtn.Name = "Maximize"
+	MaxBtn.Size = UDim2.fromOffset(26, 26)
+	MaxBtn.Position = UDim2.new(1, -62, 0.5, -13)
+	MaxBtn.BackgroundColor3 = Theme.ElementBg
+	MaxBtn.Text, MaxBtn.AutoButtonColor = "", false
+	MaxBtn.TextColor3, MaxBtn.TextSize = Theme.SubText, 18
+	MaxBtn.Parent = TopBar
+	ApplyCorner(MaxBtn, 6)
+	local maxIcon = AttachIcon("maximize-2", MaxBtn, 14, Theme.SubText, UDim2.new(0.5, -7, 0.5, -7))
+	local unmaxIcon = AttachIcon("minimize-2", MaxBtn, 14, Theme.SubText, UDim2.new(0.5, -7, 0.5, -7))
+	if unmaxIcon then unmaxIcon.Visible = false end
+	if not maxIcon then MaxBtn.Text = "□" end
+	connections:Track(MaxBtn.MouseEnter:Connect(function() Tween(MaxBtn, 0.15, { BackgroundColor3 = Theme.HoverBg }) end))
+	connections:Track(MaxBtn.MouseLeave:Connect(function() Tween(MaxBtn, 0.15, { BackgroundColor3 = Theme.ElementBg }) end))
 
 	-- ==========================================
 	-- ปุ่ม Close
@@ -393,6 +408,7 @@ return function(ctx, config)
 		transitioning = true
 		positionNeedsRestore = true
 		cancelWindowDrag()
+		if sizing then sizing:Cancel() end
 		local scope = Lifecycle.new(connections)
 		motionScope = scope
 		MainFrame.Visible = true
@@ -429,6 +445,29 @@ return function(ctx, config)
 	connections:Track(RestoreButton.MouseButton1Click:Connect(function() Window:SetVisible(true) end))
 	connections:Track(RestoreButton.MouseEnter:Connect(function() Tween(RestoreButton, 0.15, { BackgroundColor3 = Theme.HoverBg }) end))
 	connections:Track(RestoreButton.MouseLeave:Connect(function() Tween(RestoreButton, 0.15, { BackgroundColor3 = Theme.Sidebar }) end))
+
+	sizing = CreateSizing({
+		Frame = MainFrame, Viewport = ScreenGui, Scope = connections, Input = ctx.Input, Theme = Theme,
+		DefaultSize = config.Size == nil, CancelDrag = cancelWindowDrag,
+		CanManipulate = function() return not destroyed and isVisible and not isMinimized and not transitioning end,
+		GetPosition = function() return positionNeedsRestore and restorePosition or MainFrame.Position end,
+		SetPosition = function(position)
+			restorePosition = position
+			if not isMinimized and not transitioning then MainFrame.Position = position end
+		end,
+		OnMaximized = function(value)
+			if maxIcon then maxIcon.Visible = not value end
+			if unmaxIcon then unmaxIcon.Visible = value end
+			MaxBtn.Text = value and (not unmaxIcon and "❐" or "") or (not maxIcon and "□" or "")
+		end,
+	})
+	function Window:SetMaximized(value)
+		if destroyed or transitioning then return false end
+		sizing:SetMaximized(value)
+		return true
+	end
+	function Window:IsMaximized() return sizing.Maximized end
+	connections:Track(MaxBtn.MouseButton1Click:Connect(function() Window:SetMaximized(not sizing.Maximized) end))
 
 	-- ==========================================
 	-- ปุ่ม Close — ปิดหน้าต่าง + cleanup ทุก connection
@@ -477,7 +516,7 @@ return function(ctx, config)
 		if destroyed then return end
 		isVisible = visible == true
 		if not isVisible then
-			stopMotion(); cancelWindowDrag()
+			stopMotion(); cancelWindowDrag(); sizing:Cancel()
 			MainFrame.Visible = false; RestoreButton.Visible = false
 		elseif isMinimized then
 			self:SetMinimized(false)

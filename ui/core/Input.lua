@@ -4,23 +4,23 @@ return function(Runtime)
 		return Runtime and Runtime.Input:Connect(name, callback) or UserInputService[name]:Connect(callback)
 	end
 
-	local function MakeDraggable(dragPart, mainFrame, tracker, canDrag)
+	local function MakeDraggable(dragPart, mainFrame, tracker, canDrag, applyPosition)
 		local dragging = false
-		local dragStart, startPos
+		local dragStart, startPos, pointer
 
 		tracker:Track(dragPart.InputBegan:Connect(function(input)
 			if canDrag and not canDrag() then return end
 			if input.UserInputType == Enum.UserInputType.MouseButton1
 				or input.UserInputType == Enum.UserInputType.Touch then
-				dragging = true
+				if dragging then return end
+				dragging = true; pointer = input
 				dragStart = input.Position
 				startPos = mainFrame.Position
 			end
 		end))
 
-		tracker:Track(dragPart.InputEnded:Connect(function(input)
-			if input.UserInputType == Enum.UserInputType.MouseButton1
-				or input.UserInputType == Enum.UserInputType.Touch then
+		tracker:Track(ConnectInput("InputEnded", function(input)
+			if input == pointer or (pointer and pointer.UserInputType == Enum.UserInputType.MouseButton1 and input.UserInputType == Enum.UserInputType.MouseButton1) then
 				dragging = false
 			end
 		end))
@@ -29,11 +29,14 @@ return function(Runtime)
 			if canDrag and not canDrag() then dragging = false; return end
 			if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement
 				or input.UserInputType == Enum.UserInputType.Touch) then
+				if pointer.UserInputType == Enum.UserInputType.Touch and input ~= pointer then return end
+				if pointer.UserInputType == Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.MouseMovement then return end
 				local delta = input.Position - dragStart
-				mainFrame.Position = UDim2.new(
+				local position = UDim2.new(
 					startPos.X.Scale, startPos.X.Offset + delta.X,
 					startPos.Y.Scale, startPos.Y.Offset + delta.Y
 				)
+				if applyPosition then applyPosition(position) else mainFrame.Position = position end
 			end
 		end))
 		return function() dragging = false end

@@ -187,6 +187,14 @@ The old advanced module methods remain available to existing callers, but their
 controls and the T shortcut are not part of the simple interface. Legacy camera
 mode still preserves its previous lock behavior unless ApplyAssistPreset is used.
 
+## Window resizing
+
+`Resize.spec.luau` covers edge/corner anchoring, minimum/viewport bounds, mouse and
+touch ownership, outside release, focus loss, maximize/restore, minimization,
+viewport changes while hidden, responsive fields, dropdown interruption and
+cleanup. These are deterministic mock checks; live acceptance must also verify
+hit areas, touch scrolling, GUI insets and text readability at narrow widths.
+
 ## Players directory and Spectate
 
 `Players.spec.luau` covers the directory service, camera ownership/restoration,

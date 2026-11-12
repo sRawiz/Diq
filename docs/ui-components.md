@@ -148,3 +148,24 @@ Loader/ControlCenter suites ใช้ generated UI จริง
 Live acceptance: เปิดทุกแท็บ, ทดลอง slider ทั้งสองรูปแบบด้วยเมาส์/สัมผัส/พิมพ์ค่า,
 capture/cancel keybind, สร้าง controls ใน section ซ้อน, เปลี่ยน dropdown options,
 ปิด/เปิดหน้าต่างซ้ำ และตรวจ Loading/notifications รวมถึง fallback ไป PlayerGui
+
+## Window sizing and responsive layout
+
+Drag the title text to move the window. Drag any edge or corner to resize; the
+bottom-right grip makes this discoverable. Mouse and the initiating touch are
+tracked until release, with cancellation on hide, minimize, focus loss or close.
+The window stays inside ScreenGui's safe area, normally at least 420 x 300 pixels;
+on smaller screens the available area takes priority. The old 920 x 660 default
+is an initial size cap, not a permanent resize limit.
+
+The title-bar Maximize button fills the safe area and toggles back to the prior
+size and position. `Window:SetMaximized(boolean)` and `Window:IsMaximized()` expose
+the same behavior. Maximized geometry follows viewport changes. Minimize retains
+maximized state and the saved normal size. Requests during a minimize/restore
+transition return false; active gestures cannot resize the animated window.
+
+Below 680 logical pixels the sidebar uses icons. Action grids already collapse
+to one column. Input/dropdown controls below 360 logical pixels put their field
+below the label; open dropdowns settle at their new width when resized. Geometry
+uses ScreenGui.AbsoluteSize, so Roblox's safe insets are respected without mixing
+screen coordinates with GUI coordinates. Pointer movement is applied as deltas.
