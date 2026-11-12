@@ -29,7 +29,7 @@
 sidebar จะย่อเป็น icon rail โดยอัตโนมัติ พร้อมชื่อแท็บเมื่อ hover
 หน้าแรกเป็น Quick Actions; การย้าย controls เข้า section ไม่เปลี่ยน profile IDs หรือปุ่มลัด
 
-Minimize ย่อทั้งหน้าต่างด้วย UIScale ไปยังปุ่มเรียกคืนตรงกลางด้านล่างหน้าจอ
+Minimize ย่อทั้งหน้าต่างด้วย UIScale ไปยังปุ่มโลโก้ลอย (เริ่มต้นมุมขวาล่าง)
 กดปุ่มนั้น, ใช้ window shortcut (ค่าเริ่มต้น K) หรือ SelectTab เพื่อเรียกคืน
 รักษา Size, ตำแหน่งที่ลากไว้, แท็บ และสถานะ controls; การย่อไม่ปิดฟีเจอร์ที่กำลังทำงาน
 `Window:SetMinimized(boolean)` / `Window:IsMinimized()` ใช้ควบคุมสถานะนี้ได้

@@ -3,6 +3,9 @@ local Tokens = import("core/Tokens")
 local Lifecycle = import("core/Lifecycle")
 local CreateTab = import("layout/Tab")
 local CreateSizing = import("layout/WindowSizing")
+local CreateAccount = import("blocks/SidebarAccount")
+local BrandMark = import("blocks/BrandMark")
+local CreateFloatingRestore = import("overlays/FloatingRestore")
 return function(ctx, config)
 	local Diq, Theme = ctx.UI, ctx.Theme
 	local Players, CoreGui = game:GetService("Players"), game:GetService("CoreGui")
@@ -116,11 +119,13 @@ return function(ctx, config)
 	end
 
 	-- ชื่อหน้าต่าง
+	local titleMark = BrandMark(TopBar, ctx.Primitives)
+	titleMark.Position = UDim2.fromOffset(52, 10)
 	local TitleLabel = Instance.new("TextLabel")
 	TitleLabel.Name = "WindowTitle"
 	TitleLabel.Active = true
-	TitleLabel.Size = UDim2.new(1, -168, 1, 0)
-	TitleLabel.Position = UDim2.new(0, 54, 0, 0)
+	TitleLabel.Size = UDim2.new(1, -202, 1, 0)
+	TitleLabel.Position = UDim2.new(0, 88, 0, 0)
 	TitleLabel.TextTruncate = Enum.TextTruncate.AtEnd
 	TitleLabel.BackgroundTransparency = 1
 	TitleLabel.Text = windowTitle
@@ -245,7 +250,7 @@ return function(ctx, config)
 	-- Tab Container (เลื่อนได้ถ้าแท็บเยอะ)
 	local TabContainer = Instance.new("ScrollingFrame")
 	TabContainer.Name = "TabContainer"
-	TabContainer.Size = UDim2.new(1, -16, 1, -108)
+	TabContainer.Size = UDim2.new(1, -16, 1, -116)
 	TabContainer.Position = UDim2.new(0, 8, 0, 34)
 	TabContainer.BackgroundTransparency = 1
 	TabContainer.ScrollBarThickness = 2
@@ -263,19 +268,7 @@ return function(ctx, config)
 	navigationLabel.TextColor3 = Theme.DimText
 	navigationLabel.TextXAlignment = Enum.TextXAlignment.Left
 	navigationLabel.Parent = Sidebar
-	local account = Instance.new("TextLabel")
-	account.Name = "SidebarAccount"
-	account.Size = UDim2.new(1, -24, 0, 48)
-	account.Position = UDim2.new(0, 12, 1, -60)
-	account.BackgroundColor3 = Theme.ElementBg
-	account.BorderSizePixel = 0
-	account.Text = Players.LocalPlayer.Name
-	account.TextColor3 = Theme.SubText
-	account.TextSize = Tokens.Text.Small
-	account.Font = Tokens.Font.Label
-	account.TextTruncate = Enum.TextTruncate.AtEnd
-	account.Parent = Sidebar
-	ApplyCorner(account, 12)
+	local account = CreateAccount(ctx, Sidebar, Players.LocalPlayer)
 
 	local tabListLayout = Instance.new("UIListLayout")
 	tabListLayout.Padding = UDim.new(0, 4)
@@ -313,7 +306,7 @@ return function(ctx, config)
 		ContentArea.Position = UDim2.fromOffset(width + 1, 0)
 		ContentArea.Size = UDim2.new(1, -width - 1, 1, 0)
 		navigationLabel.Visible = not compact
-		account.Text = compact and Players.LocalPlayer.Name:sub(1, 1):upper() or Players.LocalPlayer.Name
+		account:SetCompact(compact)
 		for _, tab in tabs do tab:_SetCompact(compact) end
 	end
 	connections:Track(MainFrame:GetPropertyChangedSignal("AbsoluteSize"):Connect(updateSidebar))
@@ -363,38 +356,17 @@ return function(ctx, config)
 	end
 
 	-- ==========================================
-	-- Minimize into a taskbar-style restore button without changing the layout size.
+	-- Minimize into the movable brand mark without changing the layout size.
 	-- ==========================================
-	local dockPosition = UDim2.new(0.5, 0, 1, -38)
 	local restorePosition = MainFrame.Position
 	local positionNeedsRestore = false
-	local RestoreButton = Instance.new("TextButton")
-	RestoreButton.Name = "RestoreWindow"
-	RestoreButton.AnchorPoint = Vector2.new(0.5, 1)
-	RestoreButton.Position = UDim2.new(0.5, 0, 1, -16)
-	RestoreButton.Size = UDim2.fromOffset(196, 44)
-	RestoreButton.BackgroundColor3 = Theme.Sidebar
-	RestoreButton.BorderSizePixel = 0
-	RestoreButton.AutoButtonColor = false
-	RestoreButton.Text = ""
-	RestoreButton.Visible = false
-	RestoreButton.ZIndex = 10
-	RestoreButton.Parent = ScreenGui
-	ApplyCorner(RestoreButton, 12)
-	ApplyStroke(RestoreButton, Theme.Outline, 1)
-	local dockLabel = Instance.new("TextLabel")
-	dockLabel.Size = UDim2.new(1, -48, 1, 0)
-	dockLabel.Position = UDim2.fromOffset(14, 0)
-	dockLabel.BackgroundTransparency = 1
-	dockLabel.Text = windowTitle
-	dockLabel.TextColor3 = Theme.Text
-	dockLabel.Font = Tokens.Font.Label
-	dockLabel.TextSize = Tokens.Text.Body
-	dockLabel.TextXAlignment = Enum.TextXAlignment.Left
-	dockLabel.TextTruncate = Enum.TextTruncate.AtEnd
-	dockLabel.Parent = RestoreButton
-	local restoreIcon = AttachIcon("maximize-2", RestoreButton, 16, Theme.SubText, UDim2.new(1, -30, 0.5, -8))
-	if not restoreIcon then dockLabel.Text = windowTitle .. "  ↗" end
+	local floating = CreateFloatingRestore({
+		Scope = connections, Viewport = ScreenGui, Input = ctx.Input, Theme = Theme, Primitives = ctx.Primitives,
+		CanDrag = function() return not destroyed and isVisible and isMinimized and not transitioning end,
+		CanActivate = function() return not destroyed and isVisible and isMinimized end,
+		Restore = function() Window:SetVisible(true) end,
+	})
+	local RestoreButton = floating.Button
 	local motionScope
 	local function stopMotion()
 		local previous = motionScope
@@ -408,14 +380,16 @@ return function(ctx, config)
 		transitioning = true
 		positionNeedsRestore = true
 		cancelWindowDrag()
+		floating:Cancel()
 		if sizing then sizing:Cancel() end
 		local scope = Lifecycle.new(connections)
 		motionScope = scope
+		if not isMinimized and not MainFrame.Visible then MainFrame.Position = RestoreButton.Position end
 		MainFrame.Visible = true
 		RestoreButton.Visible = isMinimized
 		local service = game:GetService("TweenService")
 		local info = TweenInfo.new(0.22, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
-		local positionTween = service:Create(MainFrame, info, { Position = isMinimized and dockPosition or restorePosition })
+		local positionTween = service:Create(MainFrame, info, { Position = isMinimized and RestoreButton.Position or restorePosition })
 		local scaleTween = service:Create(WindowScale, info, { Scale = isMinimized and 0.12 or 1 })
 		scope:Track(function() positionTween:Cancel(); scaleTween:Cancel() end)
 		scope:Track(scaleTween.Completed:Connect(function(state)
@@ -442,9 +416,6 @@ return function(ctx, config)
 	end
 	function Window:IsMinimized() return isMinimized end
 	connections:Track(MinBtn.MouseButton1Click:Connect(function() Window:SetMinimized(true) end))
-	connections:Track(RestoreButton.MouseButton1Click:Connect(function() Window:SetVisible(true) end))
-	connections:Track(RestoreButton.MouseEnter:Connect(function() Tween(RestoreButton, 0.15, { BackgroundColor3 = Theme.HoverBg }) end))
-	connections:Track(RestoreButton.MouseLeave:Connect(function() Tween(RestoreButton, 0.15, { BackgroundColor3 = Theme.Sidebar }) end))
 
 	sizing = CreateSizing({
 		Frame = MainFrame, Viewport = ScreenGui, Scope = connections, Input = ctx.Input, Theme = Theme,
@@ -516,7 +487,7 @@ return function(ctx, config)
 		if destroyed then return end
 		isVisible = visible == true
 		if not isVisible then
-			stopMotion(); cancelWindowDrag(); sizing:Cancel()
+			stopMotion(); cancelWindowDrag(); sizing:Cancel(); floating:Cancel()
 			MainFrame.Visible = false; RestoreButton.Visible = false
 		elseif isMinimized then
 			self:SetMinimized(false)
@@ -533,7 +504,6 @@ return function(ctx, config)
 	function Window:SetTitle(newTitle)
 		windowTitle = newTitle
 		TitleLabel.Text = newTitle .. (activeTab and " / " .. activeTab.Name or "")
-		dockLabel.Text = newTitle .. (not restoreIcon and "  ↗" or "")
 	end
 
 	function Window:Destroy()

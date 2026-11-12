@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 32 32">
+  <title>Diq monogram</title>
+  <desc>An ivory loop and upright with a champagne diagonal signature.</desc>
+  <path d="M6 4H16A10 10 0 0 1 26 14V18A10 10 0 0 1 16 28H6Z" fill="none" stroke="#f0ebe0" stroke-width="2.5" stroke-linejoin="round"/>
+  <rect x="19" y="24.75" width="10" height="2.5" rx="1.25" fill="#c1ad8b" transform="rotate(45 24 26)"/>
+</svg>

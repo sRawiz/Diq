@@ -58,7 +58,7 @@ check(shell.Position == dockTarget, "An active title-bar drag is cancelled befor
 advance(0)
 check(not shell.Visible and dock.Visible and liveConnections() == steadyConnections,
 	"Completed minimize hides the full window and releases transition handlers")
-dock.MouseButton1Click:Fire(); advance(0)
+dock.Activated:Fire(); advance(0)
 check(not window:IsMinimized() and shell.Visible and not dock.Visible and scale.Scale == 1,
 	"The dock restores the full window")
 check(shell.Position == originalPosition and shell.Size == customSize and tab._content.Visible,
@@ -74,7 +74,7 @@ check(shell.Visible and shell.Position == originalPosition, "Showing an ordinary
 
 min.MouseButton1Click:Fire()
 local obsoleteScaleTween = TweenService.created[#TweenService.created]
-dock.MouseButton1Click:Fire()
+dock.Activated:Fire()
 check(obsoleteScaleTween.PlaybackState == Enum.PlaybackState.Cancelled, "A rapid restore cancels the previous minimize tween")
 obsoleteScaleTween.Completed:Fire(Enum.PlaybackState.Completed)
 advance(0)

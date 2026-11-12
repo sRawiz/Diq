@@ -53,7 +53,7 @@ Components suite ตรวจ resize, การกดการ์ดไม่แ
 การนำทางกลับแท็บเจ้าของหลังย้าย controls เข้า section
 ยังต้องตรวจภาพจริงและ input บน Roblox/executor โดยเฉพาะจอเล็ก dropdown และการลากหน้าต่าง
 
-Window suite ตรวจ Minimize/restore แบบปุ่มด้านล่าง, shortcut, การเรียกคืนด้วย SelectTab,
+Window suite ตรวจ Minimize/restore แบบปุ่มโลโก้ลอย, shortcut, การเรียกคืนด้วย SelectTab,
 ขนาด/ตำแหน่งเดิมหลังลาก, สลับคำสั่งระหว่าง tween, hide/show ระหว่าง restore,
 การกดซ้ำและ Destroy ระหว่าง animation โดยไม่มี task/handler ค้าง
 ตรวจ layout units ระหว่าง UIScale เพื่อไม่ให้ card grid, section และ canvas ยุบตาม scale ซ้ำ
