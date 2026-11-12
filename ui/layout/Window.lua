@@ -23,7 +23,7 @@ return function(ctx, config)
 	local windowSize  = config.Size or UDim2.new(0.92, 0, 0.88, 0)
 	local toggleKey   = config.ToggleKey or Enum.KeyCode.K
 
-	local Window = {}
+	local Window = { Title = windowTitle }
 
 	local connections = ctx.Scope
 
@@ -118,23 +118,18 @@ return function(ctx, config)
 		SidebarBtn.Text = "☰"; SidebarBtn.TextSize = 18; SidebarBtn.TextColor3 = Theme.Text
 	end
 
-	-- ชื่อหน้าต่าง
-	local titleMark = BrandMark(TopBar, ctx.Primitives)
+	-- Logo-only header; the remaining blank area still drags the window.
+	local titleMark = BrandMark(TopBar, ctx.Primitives, MainFrame, connections)
 	titleMark.Position = UDim2.fromOffset(52, 10)
-	local TitleLabel = Instance.new("TextLabel")
-	TitleLabel.Name = "WindowTitle"
-	TitleLabel.Active = true
-	TitleLabel.Size = UDim2.new(1, -202, 1, 0)
-	TitleLabel.Position = UDim2.new(0, 88, 0, 0)
-	TitleLabel.TextTruncate = Enum.TextTruncate.AtEnd
-	TitleLabel.BackgroundTransparency = 1
-	TitleLabel.Text = windowTitle
-	TitleLabel.TextColor3 = Theme.Text
-	TitleLabel.Font = Tokens.Font.Strong
-	TitleLabel.TextSize = Tokens.Text.Title
-	TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
-	TitleLabel.Parent = TopBar
-	local cancelWindowDrag = MakeDraggable(TitleLabel, MainFrame, connections, function()
+	local DragArea = Instance.new("Frame")
+	DragArea.Name = "WindowDragArea"
+	DragArea.Active = true
+	DragArea.Size = UDim2.new(1, -158, 1, 0)
+	DragArea.Position = UDim2.fromOffset(44, 0)
+	DragArea.BackgroundTransparency = 1
+	DragArea.ZIndex = 4
+	DragArea.Parent = TopBar
+	local cancelWindowDrag = MakeDraggable(DragArea, MainFrame, connections, function()
 		return isVisible and not isMinimized and not transitioning and not (sizing and (sizing.Maximized or sizing:IsResizing()))
 	end, function(position)
 		MainFrame.Position = sizing and sizing:Constrain(position) or position
@@ -331,7 +326,6 @@ return function(ctx, config)
 
 		-- เปิดแท็บใหม่
 		activeTab = targetTab
-		TitleLabel.Text = windowTitle .. " / " .. targetTab.Name
 		activeTab._content.Visible = true
 		Tween(activeTab._button, 0.2, { BackgroundColor3 = Theme.ActiveTab, BackgroundTransparency = 0 })
 		Tween(activeTab._label, 0.2, { TextColor3 = Theme.Text })
@@ -503,7 +497,7 @@ return function(ctx, config)
 
 	function Window:SetTitle(newTitle)
 		windowTitle = newTitle
-		TitleLabel.Text = newTitle .. (activeTab and " / " .. activeTab.Name or "")
+		self.Title = newTitle -- Compatibility metadata; header intentionally stays logo-only.
 	end
 
 	function Window:Destroy()

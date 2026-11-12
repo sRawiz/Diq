@@ -2,8 +2,15 @@
 
 The mark combines a geometric D outline with a short Q-like diagonal signature.
 Ivory (#F0EBE0) and muted champagne (#C1AD8B) sit on the existing charcoal surface.
-`ui/blocks/BrandMark.lua` draws native GUI primitives in the title bar and minimized
-button. No upload, downloaded icon or executor-specific image loader is needed.
+`ui/blocks/BrandMark.lua` draws overlapping filled silhouettes in the title bar
+and minimized button. It avoids joining clipped UIStroke arcs to thin bars, which
+showed visible seams in the live client. The inner cutout follows the actual
+surface color, including hover changes. No upload, downloaded icon or
+executor-specific image loader is needed.
+
+The header shows only the logo and window controls. Its transparent drag area
+covers the logo and blank center. `SetTitle` still updates `Window.Title` metadata,
+but neither it nor tab switching adds the old `Diq / Tab` text back to the header.
 
 Exports in `assets/`: `diq-mark.svg`, transparent `diq-mark.png`, and
 `diq-badge-preview.png`. The last file is a design preview, not a live Roblox

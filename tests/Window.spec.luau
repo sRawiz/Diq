@@ -45,7 +45,7 @@ check(surface:FindFirstChild("SquareTop").Size.Y.Offset == 18
 	and surface:FindFirstChild("SquareRight").Size.X.Offset == 18,
 	"Only the sidebar's interior top and right edges are squared")
 
-top.WindowTitle.InputBegan:Fire({UserInputType=Enum.UserInputType.MouseButton1,Position=vec(100,100)})
+top.WindowDragArea.InputBegan:Fire({UserInputType=Enum.UserInputType.MouseButton1,Position=vec(100,100)})
 Input.InputChanged:Fire({UserInputType=Enum.UserInputType.MouseMovement,Position=vec(160,140)})
 local originalPosition = shell.Position
 check(originalPosition.X.Offset == 60 and originalPosition.Y.Offset == 40, "Window can still be dragged before minimizing")

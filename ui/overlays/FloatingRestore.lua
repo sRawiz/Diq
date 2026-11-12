@@ -13,7 +13,7 @@ return function(ctx)
 	button.Parent = viewport
 	ctx.Primitives.ApplyCorner(button, 18)
 	ctx.Primitives.ApplyStroke(button, ctx.Theme.Outline, 1)
-	local mark = BrandMark(button, ctx.Primitives)
+	local mark = BrandMark(button, ctx.Primitives, button, scope)
 	mark.Position = UDim2.fromOffset(12, 12)
 	local pointer, start, origin, moved
 	local suppressed = false

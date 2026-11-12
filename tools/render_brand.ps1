@@ -11,27 +11,27 @@ function New-RoundedPath([single]$x, [single]$y, [single]$width, [single]$height
     $path.CloseFigure()
     return ,$path
 }
-function Draw-Mark($graphics) {
+function Draw-Mark($graphics, $surface) {
     $ink = [System.Drawing.ColorTranslator]::FromHtml('#f0ebe0')
-    $pen = [System.Drawing.Pen]::new($ink, 2.5)
     $brush = [System.Drawing.SolidBrush]::new($ink)
     $accent = [System.Drawing.SolidBrush]::new([System.Drawing.ColorTranslator]::FromHtml('#c1ad8b'))
-    $loop = New-RoundedPath 6 4 20 24 10
-    $spine = New-RoundedPath 4.75 2.75 2.5 26.5 1.25
+    $cutout = [System.Drawing.SolidBrush]::new($surface)
+    $outer = New-RoundedPath 4.75 2.75 22.5 26.5 11.25
+    $left = New-RoundedPath 4.75 2.75 11.25 26.5 1.25
+    $inner = New-RoundedPath 7.25 5.25 17.5 21.5 8.75
     $tail = New-RoundedPath -5 -1.25 10 2.5 1.25
-    $clipState = $graphics.Save()
-    $graphics.SetClip([System.Drawing.RectangleF]::new(16, 2, 12, 28))
-    $graphics.DrawPath($pen, $loop)
-    $graphics.Restore($clipState)
-    $graphics.FillPath($brush, $spine)
-    $graphics.FillRectangle($brush, [single]6, [single]2.75, [single]10, [single]2.5)
-    $graphics.FillRectangle($brush, [single]6, [single]26.75, [single]10, [single]2.5)
+    $graphics.FillPath($brush, $outer)
+    $graphics.FillPath($brush, $left)
+    if ($surface.A -eq 0) { $graphics.CompositingMode = [System.Drawing.Drawing2D.CompositingMode]::SourceCopy }
+    $graphics.FillPath($cutout, $inner)
+    $graphics.FillRectangle($cutout, [single]7.25, [single]5.25, [single]8.75, [single]21.5)
+    $graphics.CompositingMode = [System.Drawing.Drawing2D.CompositingMode]::SourceOver
     $state = $graphics.Save()
     $graphics.TranslateTransform(24, 26)
     $graphics.RotateTransform(45)
     $graphics.FillPath($accent, $tail)
     $graphics.Restore($state)
-    foreach ($item in @($pen, $brush, $accent, $loop, $spine, $tail)) { $item.Dispose() }
+    foreach ($item in @($brush, $accent, $cutout, $outer, $left, $inner, $tail)) { $item.Dispose() }
 }
 foreach ($badge in @($false, $true)) {
     $bitmap = [System.Drawing.Bitmap]::new(1024, 1024)
@@ -46,11 +46,11 @@ foreach ($badge in @($false, $true)) {
         $graphics.FillPath($background, $path)
         $graphics.DrawPath($outline, $path)
         $graphics.TranslateTransform(16, 16)
-        Draw-Mark $graphics
+        Draw-Mark $graphics ([System.Drawing.ColorTranslator]::FromHtml('#181818'))
         $background.Dispose(); $outline.Dispose(); $path.Dispose()
     } else {
         $graphics.ScaleTransform(32, 32)
-        Draw-Mark $graphics
+        Draw-Mark $graphics ([System.Drawing.Color]::Transparent)
     }
     $graphics.Dispose()
     $output = [System.Drawing.Bitmap]::new(256, 256)

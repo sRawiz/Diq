@@ -12,6 +12,7 @@ own.DisplayName = "Display Name"
 local ui = importUI("init")()
 local window = ui:CreateWindow({ Title = "Diq", Size = UDim2.fromOffset(800, 580) })
 local tab = window:CreateTab("Settings")
+local anotherTab = window:CreateTab("Other")
 local gui = CoreGui.Diq_UI
 gui.AbsoluteSize = vec(1280, 900)
 local shell, dock = gui.DiqMainFrame, gui.RestoreWindow
@@ -32,7 +33,15 @@ check(account.DisplayName.Visible and account.Username.Visible and account.Portr
 own.DisplayName = "Updated Name"
 check(account.DisplayName.Text == "Updated Name", "Display-name changes update without rebuilding the card")
 check(dock.Size.X.Offset == 56 and dock.Size.Y.Offset == 56 and dock.Text == "" and dock.DiqMark ~= nil, "Minimized surface is a square logo button")
-check(shell.TopBar.DiqMark.Arc.Loop:FindFirstChildOfClass("UIStroke") ~= nil, "Header uses the native logo without an image asset")
+check(shell.TopBar.DiqMark.Outline ~= nil and shell.TopBar.DiqMark.Cutout ~= nil, "Header uses filled silhouettes without clipped strokes")
+for _, node in shell.TopBar.DiqMark:GetDescendants() do
+	check(not node:IsA("UIStroke") and not node.ClipsDescendants, "Logo avoids clipped stroke seams")
+end
+dock.MouseEnter:Fire(); advance(0)
+check(dock.DiqMark.Cutout.BackgroundColor3 == dock.BackgroundColor3
+	and dock.DiqMark.Cutout.StraightEdge.BackgroundColor3 == dock.BackgroundColor3,
+	"Logo cutout follows hover surface without a background patch")
+check(shell.TopBar.DiqMark.Cutout.BackgroundColor3 == shell.BackgroundColor3, "Header cutout uses actual window surface")
 local originalPosition, originalSize = shell.Position, shell.Size
 window:SetMinimized(true); advance(0)
 local stable = liveConnections()
@@ -86,7 +95,12 @@ frozen = dock.Position; move(500, 500)
 check(dock.Position == frozen and dock.Position.X.Scale * 320 >= 36 and dock.Position.Y.Scale * 240 >= 36,
 	"Viewport resize cancels drag and keeps logo reachable")
 window:SetTitle("Renamed")
-check(shell.TopBar.WindowTitle.Text == "Renamed / Settings" and dock.DiqMark ~= nil, "SetTitle preserves native-logo compatibility")
+check(window.Title == "Renamed" and not shell.TopBar:FindFirstChild("WindowTitle") and dock.DiqMark ~= nil,
+	"SetTitle keeps metadata without reintroducing header text")
+window:SelectTab(anotherTab); advance(0)
+check(not shell.TopBar:FindFirstChild("WindowTitle") and shell.TopBar.WindowDragArea.Active,
+	"Tab switching retains logo-only header and active drag area")
+window:SetMinimized(true); advance(0)
 for _ = 1, 15 do
 	local click = begin(); endMouse(); dock.Activated:Fire(click); advance(0)
 	window:SetMinimized(true); advance(0)
