@@ -144,11 +144,11 @@ local loadedModules = 0
 local moduleLabels = {
 	Infrastructure = "Preparing the session", DiqUILib = "Loading the interface", DiqIcons = "Loading icons",
 	MovementSystem = "Loading movement controls", ESPSystem = "Loading visual controls", AimbotSystem = "Loading aim controls",
-	HitboxSystem = "Loading hitbox controls", MiscSystem = "Loading extra tools", Preferences = "Loading preferences",
+	HitboxSystem = "Loading hitbox controls", TrollingSystem = "Loading emotes", MiscSystem = "Loading extra tools", Preferences = "Loading preferences",
 	Keybinds = "Loading shortcuts", ControlCenter = "Loading the control center",
 }
 local function LoadModule(name, methods, optional)
-	SetLoading(moduleLabels[name] or "Loading components", loadedModules / 11 * 0.7)
+	SetLoading(moduleLabels[name] or "Loading components", loadedModules / 12 * 0.7)
 	startupFailure = "A required component could not be loaded. Please try again."
 	local function fail(stage, err)
 		local message = "[Diq] " .. name .. " " .. stage .. " failed: " .. tostring(err)
@@ -204,6 +204,7 @@ local function Start()
 	local ESP = LoadModule("ESPSystem", { "Destroy", "Init", "SetBoxes", "SetEnabled", "SetHealth", "SetHighlights", "SetNames", "SetTracers", "SetUseTeamColor", "SetColorMode", "SetRelationVisible", "SetRelationColor", "SetShowRelation", "SetTeamAttribute", "SetMaxDistance", "SetPerformance", "IsEnabled" })
 	local Aimbot = LoadModule("AimbotSystem", { "Destroy", "Init", "ApplyAssistPreset", "SetEnabledListener", "SetEnabled", "SetAimPart", "SetFOVRadius", "SetShowFOV", "SetManagedInput", "SetScanInterval", "SetInputSuspended", "IsEnabled" })
 	local Hitbox = LoadModule("HitboxSystem", { "Destroy", "Init", "SetEnabled", "SetSize", "SetTargetPart", "SetTeamCheck", "SetTransparency", "IsEnabled" })
+	local Trolling = LoadModule("TrollingSystem", { "Destroy", "GetAnimations", "Play", "Stop" })
 	local Misc = LoadModule("MiscSystem", { "Destroy", "Rejoin", "ServerHop", "FindBestServer", "CancelServerSearch", "SetServerListener", "SetAntiAFK", "SetFullbright", "IsAntiAFK", "IsFullbright", "SetStateListener" })
 	local Preferences = LoadModule("Preferences", { "new" })
 	local Keybinds = LoadModule("Keybinds", { "new" })
@@ -229,7 +230,7 @@ local function Start()
 	})
 	local Controls = ControlCenter.new({ App = App, Window = MyWindow, UI = DiqUI, Runtime = App.Runtime,
 		Preferences = Preferences, Keybinds = Keybinds,
-		Modules = { Movement = Movement, ESP = ESP, Aim = Aimbot, Hitbox = Hitbox, Misc = Misc },
+		Modules = { Movement = Movement, ESP = ESP, Aim = Aimbot, Hitbox = Hitbox, Trolling = Trolling, Misc = Misc },
 	})
 	App.Tools = Controls
 	table.insert(App.Modules, { Name = "ControlCenter", Module = Controls })
@@ -472,6 +473,19 @@ local function Start()
 			state and "info" or "warning"
 		)
 	end, { Icon = "sun" })
+
+	local trollingPage = MyWindow:CreateTab("Trolling", "drama", { Description = "Play emotes on your character in R6 or R15." })
+	local animationActions = trollingPage:CreateActionGroup({ Columns = 2, MinWidth = 140 })
+	local function showAnimationError(reason)
+		if not App.Destroyed then DiqUI:Notify("Animation unavailable", reason, 4, "warning") end
+	end
+	for _, name in Trolling.GetAnimations() do
+		animationActions:CreateButton(name, function()
+			local ok, reason = Trolling.Play(name, showAnimationError)
+			if not ok then showAnimationError(reason) end
+		end, { Icon = "play" })
+	end
+	trollingPage:CreateButton("Stop Animation", Trolling.Stop, { Icon = "square", Variant = "Danger" })
 
 	-- ==========================================
 	-- ⚙️ Tab: Settings (ใช้ Lucide icon "settings")

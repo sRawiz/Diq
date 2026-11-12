@@ -72,7 +72,7 @@ end
 loadstring=function(source) return factories[source] end
 local remote=factories.Main()
 check(remote~=nil,"Remote loader starts with resolved revision")
-check(#urls==12,"One revision resolution plus eleven module downloads")
+check(#urls==13,"One revision resolution plus twelve module downloads")
 for i=2,#urls do check(string.find(urls[i],string.rep("a",40),1,true)~=nil,"All downloads use one immutable revision") end
 remote:Destroy(); advance(20); advance(0)
 check(liveConnections()==baseline,"Remote-loaded session cleans up")

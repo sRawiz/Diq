@@ -245,7 +245,77 @@ click("Refresh Report")
 check(services.HttpService:JSONDecode(inputBox("Report").Text).FrameSample~=nil, "Diagnostics UI refresh writes readable report data")
 check(tools:Reset() and captured.AimbotSystem.GetFOVRadius()==150 and tools.Performance=="High", "Reset restores all feature defaults and budgets")
 check(keys.Entries.window.Key=="K" and keys.Entries["movement.noclip"].Mode=="Toggle", "Reset restores binding defaults")
+
+-- Drive the production tab with a simulated Roblox Animator.
+local character = own.Character
+local humanoid = character.Humanoid
+humanoid.RigType = Enum.HumanoidRigType.R6
+humanoid.Died = signal()
+local animator = Instance.new("Animator")
+animator.Parent = humanoid
+local length, failPlayback = 2, false
+local lastTrack
+function animator:LoadAnimation(animation)
+	local track = Instance.new("AnimationTrack")
+	track.Animation = animation
+	track.Ended = signal()
+	track.Length = length
+	function track:Play()
+		if failPlayback then error("mock playback error") end
+		self.IsPlaying = true
+	end
+	function track:Stop() self.IsPlaying = false end
+	lastTrack = track
+	return track
+end
+local function released(track)
+	return track.Destroyed and track.Animation.Destroyed and not track.IsPlaying and track.Ended:Count() == 0
+end
+click("Trolling")
+check(labelObject("Wave").Parent.Parent.Parent.Name == "Tab_Trolling" and not tools.QuickTab._content.Visible,
+	"Trolling is reachable from the sidebar")
+local idleConnections = liveConnections()
+click("Wave")
+local wave = lastTrack
+check(wave.IsPlaying and not wave.Looped and wave.Animation.AnimationId == "rbxassetid://128777973", "R6 wave plays once with the R6 asset")
+click("Dance 1")
+check(released(wave) and lastTrack.Looped and lastTrack.Animation.AnimationId == "rbxassetid://182435998",
+	"Starting a dance replaces the owned track and loops the R6 dance")
+click("Stop Animation")
+check(released(lastTrack) and liveConnections() == idleConnections, "Stop Animation releases the track and its connections")
+humanoid.RigType = Enum.HumanoidRigType.R15
+click("Wave")
+check(lastTrack.IsPlaying and lastTrack.Animation.AnimationId == "rbxassetid://507770239", "The same button selects the R15 asset")
+lastTrack.Ended:Fire()
+check(released(lastTrack), "Natural completion releases the animation")
+click("Dance 1")
+check(lastTrack.IsPlaying and lastTrack.Animation.AnimationId == "rbxassetid://507771019", "R15 dance uses its own asset")
+press("End"); release("End")
+check(released(lastTrack), "The emergency stop releases an active emote")
+click("Dance 1")
+humanoid.Died:Fire()
+check(released(lastTrack), "Death releases an active emote")
+click("Dance 1")
+own.CharacterRemoving:Fire(character)
+check(released(lastTrack), "Character removal releases an active emote")
+own.CharacterAdded:Fire(character)
+
+failPlayback = true
+local played, failure = captured.TrollingSystem.Play("Dance 1")
+check(not played and failure:find("Could not play", 1, true) and released(lastTrack), "Playback failure releases partially created resources")
+failPlayback, length = false, 0
+click("Wave")
+advance(8)
+check(released(lastTrack) and labelObject("Animation unavailable"), "An asset that fails to load is released and reported in the UI")
+local reported = false
+check(captured.TrollingSystem.Play("Dance 1", function() reported = true end), "A slow asset can still start loading")
+local pending = lastTrack
+length = 2
+click("Wave")
+advance(8)
+check(released(pending) and lastTrack.IsPlaying and not reported, "A replaced load cannot report an error or stop the current track")
 tools:SampleFrames(); app:Destroy(); advance(30); advance(0)
+check(released(lastTrack), "Closing the panel releases the active emote")
 check(liveConnections()==baseline, "Shutdown cancels samples, picker handlers and shared input")
 check(not tools:ApplyProfile(profile) and not tools:SetPerformance("Low"), "Closed control center rejects mutations")
 local second=assert(factories.Main({Factories=injected})); second:Destroy(); advance(20); advance(0)
